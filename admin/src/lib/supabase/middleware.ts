@@ -1,13 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { requireSupabaseAuthEnv } from "../env";
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request,
   });
 
-  const { url, anonKey } = requireSupabaseAuthEnv();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    return response;
+  }
 
   const supabase = createServerClient(url, anonKey, {
     cookies: {
