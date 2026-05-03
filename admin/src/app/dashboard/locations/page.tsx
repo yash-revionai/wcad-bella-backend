@@ -1,7 +1,10 @@
+import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { getLocationsData } from "@/lib/admin-data";
+import Link from "next/link";
+import { LocationsSkeleton } from "@/components/skeletons/locations-skeleton";
 
-export default async function LocationsPage() {
+async function LocationsContent() {
   const data = await getLocationsData();
 
   return (
@@ -22,8 +25,8 @@ export default async function LocationsPage() {
                     {location.slug === "pikesville" ? "Pikesville" : location.slug === "towson" ? "Towson" : "Mobile"}
                   </h2>
                 </div>
-                <div className="relative h-7 w-12 rounded-full bg-[rgba(73,151,115,0.28)]">
-                  <div className="absolute right-1 top-1 h-5 w-5 rounded-full bg-[#61be8b]" />
+                <div className={`relative h-7 w-12 rounded-full ${location.active ? "bg-[rgba(73,151,115,0.28)]" : "bg-[rgba(186,95,97,0.22)]"}`}>
+                  <div className={`absolute top-1 h-5 w-5 rounded-full ${location.active ? "right-1 bg-[#61be8b]" : "left-1 bg-[#ba5f61]"}`} />
                 </div>
               </div>
 
@@ -43,13 +46,21 @@ export default async function LocationsPage() {
               <p className="mt-5 max-w-[180px] text-[16px] leading-7 text-[#8f8779]">{location.shortAddress}</p>
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <button className="ghost-button min-h-[48px] justify-center text-[#d9d2c6]">View calendar</button>
-                <button className="action-button min-h-[48px] justify-center">Edit settings</button>
+                <Link href="/dashboard/settings" className="ghost-button min-h-[48px] justify-center text-[#d9d2c6]">Calendar</Link>
+                <Link href="/dashboard/schedule" className="action-button min-h-[48px] justify-center">Schedule</Link>
               </div>
             </article>
           ))}
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LocationsPage() {
+  return (
+    <Suspense fallback={<LocationsSkeleton />}>
+      <LocationsContent />
+    </Suspense>
   );
 }

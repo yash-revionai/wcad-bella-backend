@@ -1,8 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { AppError } from "./errors.js";
+import { env } from "./env.js";
 
 function getEncryptionKey() {
-  const rawKey = process.env.ENCRYPTION_KEY;
+  const rawKey = env.ENCRYPTION_KEY;
   if (!rawKey) {
     throw new AppError("ENCRYPTION_KEY is required for Google token encryption", 503);
   }
@@ -40,4 +41,3 @@ export function decryptSecret(value: string) {
     decipher.final()
   ]).toString("utf8");
 }
-

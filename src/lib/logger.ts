@@ -7,14 +7,17 @@ export const logger = pino({
       "req.headers.authorization",
       "req.headers.cookie",
       "req.headers.x-api-key",
+      "req.headers.x-admin-api-key",
       "req.body.callerPhone",
       "req.body.customer_phone",
       "req.body.customerPhone",
       "body.callerPhone",
       "body.customer_phone",
-      "body.customerPhone"
+      "body.customerPhone",
+      "requestBody.callerPhone",
+      "requestBody.customer_phone",
+      "requestBody.customerPhone"
     ],
     censor: "[redacted]"
   }
 });
-

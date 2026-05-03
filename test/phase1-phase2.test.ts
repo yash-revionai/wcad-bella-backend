@@ -10,6 +10,7 @@ import { confirmBookingWithDependencies } from "../src/services/booking.js";
 
 const app = createApp();
 const bellaApiKey = process.env.BELLA_API_KEY!;
+const adminApiKey = process.env.ADMIN_API_KEY!;
 const mockAccount = {
   id: "account-1",
   business_name: "World Class Auto Detail",
@@ -19,6 +20,20 @@ const mockAccount = {
   google_token_expiry: null,
   google_main_calendar_id: "main-calendar"
 };
+
+function createNoExistingBookingSupabaseClient() {
+  return {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: null, error: null })
+          })
+        })
+      })
+    })
+  };
+}
 
 test("GET /api/health returns service status", async () => {
   const response = await request(app).get("/api/health").expect(200);
@@ -34,22 +49,38 @@ test("unknown routes return 404", async () => {
 });
 
 test("Google OAuth start redirects when credentials are configured", async () => {
-  const response = await request(app).get("/api/auth/google").expect(302);
+  const response = await request(app).get("/api/auth/google").set("x-admin-api-key", adminApiKey).expect(302);
   const location = response.headers.location;
   assert.ok(location);
   const redirectUrl = location;
   assert.match(redirectUrl, /^https:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth/);
   assert.match(redirectUrl, /calendar\.readonly/);
   assert.match(redirectUrl, /calendar\.events/);
+  assert.match(redirectUrl, /state=[^&]+\.[^&]+/);
+});
+
+test("Google OAuth start requires admin API key", async () => {
+  const response = await request(app).get("/api/auth/google").expect(401);
+  assert.equal(response.body.error, "Unauthorized");
 });
 
 test("Google mapping update validates required location mappings", async () => {
   const response = await request(app)
     .put("/api/google/mapping")
+    .set("x-admin-api-key", adminApiKey)
     .send({ mainCalendarId: "primary", locations: { pikesville: "pikesville-calendar" } })
     .expect(400);
 
   assert.equal(response.body.error, "Invalid request body");
+});
+
+test("Google admin routes require admin API key", async () => {
+  const response = await request(app)
+    .put("/api/google/mapping")
+    .send({ mainCalendarId: "primary", locations: { pikesville: "pikesville-calendar" } })
+    .expect(401);
+
+  assert.equal(response.body.error, "Unauthorized");
 });
 
 test("POST /api/availability requires Bella API key", async () => {
@@ -92,9 +123,27 @@ test("POST /api/availability rejects invalid preferredDate values", async () => 
       location: "pikesville",
       preferredDate: "04/29/2026"
     })
-    .expect(400);
+    .expect(200);
 
-  assert.equal(response.body.error, "Invalid request body");
+  assert.match(response.body.result, /valid appointment details/);
+  assert.deepEqual(response.body.slots, []);
+});
+
+test("POST /api/availability rejects caller-supplied accountId", async () => {
+  const response = await request(app)
+    .post("/api/availability")
+    .set("x-api-key", bellaApiKey)
+    .send({
+      accountId: "00000000-0000-0000-0000-000000000000",
+      service: "interior_deep",
+      vehicleType: "suv",
+      location: "pikesville",
+      preferredDate: "2026-04-29"
+    })
+    .expect(200);
+
+  assert.match(response.body.result, /valid appointment details/);
+  assert.deepEqual(response.body.slots, []);
 });
 
 test("POST /api/booking rejects invalid appointmentStart values", async () => {
@@ -109,9 +158,45 @@ test("POST /api/booking rejects invalid appointmentStart values", async () => {
       location: "pikesville",
       appointmentStart: "2026-04-29 10:00"
     })
-    .expect(400);
+    .expect(200);
 
-  assert.equal(response.body.error, "Invalid request body");
+  assert.match(response.body.result, /valid details/);
+});
+
+test("POST /api/booking rejects caller-supplied accountId", async () => {
+  const response = await request(app)
+    .post("/api/booking")
+    .set("x-api-key", bellaApiKey)
+    .send({
+      accountId: "00000000-0000-0000-0000-000000000000",
+      callerName: "John Smith",
+      callerPhone: "4435551234",
+      service: "interior_deep",
+      vehicleType: "suv",
+      location: "pikesville",
+      appointmentStart: "2026-04-29T10:00:00"
+    })
+    .expect(200);
+
+  assert.match(response.body.result, /valid details/);
+});
+
+test("POST /api/booking rejects null callerEmail", async () => {
+  const response = await request(app)
+    .post("/api/booking")
+    .set("x-api-key", bellaApiKey)
+    .send({
+      callerName: "John Smith",
+      callerPhone: "4435551234",
+      callerEmail: null,
+      service: "interior_deep",
+      vehicleType: "suv",
+      location: "pikesville",
+      appointmentStart: "2026-04-29T10:00:00"
+    })
+    .expect(200);
+
+  assert.match(response.body.result, /valid details/);
 });
 
 test("POST /api/booking rejects invalid callerPhone values", async () => {
@@ -126,9 +211,9 @@ test("POST /api/booking rejects invalid callerPhone values", async () => {
       location: "pikesville",
       appointmentStart: "2026-04-29T10:00:00"
     })
-    .expect(400);
+    .expect(200);
 
-  assert.equal(response.body.error, "Invalid request body");
+  assert.match(response.body.result, /valid details/);
 });
 
 test("phone normalization converts local US numbers to E.164", () => {
@@ -315,9 +400,7 @@ test("booking degrades gracefully when Google Calendar write fails", async () =>
         throw new AppError("Google Calendar is temporarily unavailable.", 503, "google_calendar_unavailable");
       },
       deleteCalendarEvent: async () => undefined,
-      createServiceSupabaseClient: () => {
-        throw new Error("should not create supabase client");
-      },
+      createServiceSupabaseClient: createNoExistingBookingSupabaseClient as never,
       sendSmsConfirmation: async () => false,
       sendEmailConfirmation: async () => false
     }

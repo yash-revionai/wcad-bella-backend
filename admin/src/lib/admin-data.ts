@@ -1,9 +1,9 @@
 import "server-only";
 
 import { endOfDay, endOfWeek, formatISO, startOfDay, startOfWeek } from "date-fns";
+import { getAuthorizedAdminAccountId } from "./admin-auth";
 import { createServiceSupabaseClient } from "./supabase/server";
-import { demoBookings, demoLocations } from "./demo-data";
-import { getBackendUrl, hasBackendEnv, hasSupabaseServiceEnv } from "./env";
+import { getBackendAdminHeaders, getBackendUrl, hasBackendEnv } from "./env";
 
 export type BookingRecord = {
   id: string;
@@ -26,6 +26,9 @@ export type LocationScheduleRecord = {
   slug: string;
   address: string | null;
   same_day_cutoff_time: string | null;
+  capacity: number;
+  buffer_minutes: number;
+  is_active: boolean | null;
   hours: Array<{
     day_of_week: number;
     is_closed: boolean | null;
@@ -94,27 +97,25 @@ function normalizeBookingRow(row: RawBookingRow): BookingRecord {
   };
 }
 
-async function fetchGoogleSettings(): Promise<GoogleSettings> {
-  if (!hasBackendEnv()) {
+async function fetchGoogleSettings(accountId: string | null): Promise<GoogleSettings> {
+  const backendHeaders = getBackendAdminHeaders();
+  if (!hasBackendEnv() || !backendHeaders || !accountId) {
     return {
       connected: false,
       mainCalendarMapped: false,
       mainCalendarId: null,
-      locations: demoLocations.map((location) => ({
-        slug: location.slug,
-        name: location.name,
-        google_calendar_id: null,
-      })),
+      locations: [],
       calendarOptions: [],
       backendUrl: null,
     };
   }
 
   const backendUrl = getBackendUrl()!;
+  const accountQuery = new URLSearchParams({ accountId });
   const [statusResponse, mappingResponse, calendarsResponse] = await Promise.all([
-    fetch(`${backendUrl}/api/google/status`, { cache: "no-store" }),
-    fetch(`${backendUrl}/api/google/mapping`, { cache: "no-store" }),
-    fetch(`${backendUrl}/api/google/calendars`, { cache: "no-store" }),
+    fetch(`${backendUrl}/api/google/status?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
+    fetch(`${backendUrl}/api/google/mapping?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
+    fetch(`${backendUrl}/api/google/calendars?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
   ]);
 
   const status = await statusResponse.json();
@@ -132,71 +133,63 @@ async function fetchGoogleSettings(): Promise<GoogleSettings> {
 }
 
 export async function getDashboardData() {
-  if (!hasSupabaseServiceEnv()) {
-    return {
-      mode: "demo" as const,
-      todayBookings: demoBookings.slice(0, 4) as unknown as BookingRecord[],
-      bookingsTodayCount: 4,
-      bookingsWeekCount: 12,
-      sameDaySlotsRemaining: 7,
-      callsThisWeek: 34,
-      bookingRate: 89,
-      googleConnected: false,
-      needsAttention: ["Connect Supabase and backend env vars inside /admin to switch this dashboard from demo mode to live data."],
-    };
-  }
-
+  const accountId = await getAuthorizedAdminAccountId();
   const supabase = createServiceSupabaseClient();
   const now = new Date();
   const dayStart = formatISO(startOfDay(now));
   const dayEnd = formatISO(endOfDay(now));
   const weekEnd = formatISO(endOfWeek(now, { weekStartsOn: 1 }));
 
-  const [{ data: todayBookings }, { count: bookingsTodayCount }, { count: bookingsWeekCount }, google] = await Promise.all([
+  const [{ data: todayBookings }, { count: bookingsTodayCount }, { data: weekBookings, count: bookingsWeekCount }, google] = await Promise.all([
     supabase
       .from("bookings")
       .select("id,customer_name,customer_phone,customer_email,appointment_start,appointment_end,vehicle_type,notes,price_cents,status,services(name),locations(name,slug,address)")
+      .eq("account_id", accountId)
       .gte("appointment_start", dayStart)
       .lte("appointment_start", dayEnd)
       .order("appointment_start"),
     supabase
       .from("bookings")
       .select("id", { count: "exact", head: true })
+      .eq("account_id", accountId)
       .gte("appointment_start", dayStart)
       .lte("appointment_start", dayEnd),
     supabase
       .from("bookings")
-      .select("id", { count: "exact", head: true })
+      .select("id,price_cents", { count: "exact" })
+      .eq("account_id", accountId)
       .gte("appointment_start", formatISO(startOfWeek(now, { weekStartsOn: 1 })))
       .lte("appointment_start", weekEnd),
-    fetchGoogleSettings(),
+    fetchGoogleSettings(accountId),
   ]);
+  const revenueThisWeekCents = (weekBookings ?? []).reduce((sum, booking) => sum + (booking.price_cents ?? 0), 0);
 
   return {
     mode: "live" as const,
     todayBookings: (todayBookings ?? []).map(normalizeBookingRow),
     bookingsTodayCount: bookingsTodayCount ?? 0,
     bookingsWeekCount: bookingsWeekCount ?? 0,
-    sameDaySlotsRemaining: Math.max(0, 6 - (bookingsTodayCount ?? 0)),
-    callsThisWeek: Math.max(34, (bookingsWeekCount ?? 0) * 3),
-    bookingRate: Math.min(99, Math.round(((bookingsWeekCount ?? 0) / Math.max(1, (bookingsWeekCount ?? 0) * 3)) * 100)),
+    revenueThisWeekCents,
+    calendarReady:
+      google.connected &&
+      google.mainCalendarMapped &&
+      google.locations.length >= 3 &&
+      google.locations.every((location) => Boolean(location.google_calendar_id)),
     googleConnected: google.connected,
-    needsAttention: google.connected ? [] : ["Google Calendar is disconnected. Bella cannot read or confirm live bookings until it is reconnected."],
+    needsAttention:
+      google.connected && google.mainCalendarMapped
+        ? []
+        : ["Google Calendar is not fully connected and mapped. Bella cannot read or confirm live bookings until setup is complete."],
   };
 }
 
 export async function getBookingsData() {
-  if (!hasSupabaseServiceEnv()) {
-    return {
-      mode: "demo" as const,
-      bookings: demoBookings as unknown as BookingRecord[],
-    };
-  }
-
+  const accountId = await getAuthorizedAdminAccountId();
   const supabase = createServiceSupabaseClient();
   const { data } = await supabase
     .from("bookings")
     .select("id,customer_name,customer_phone,customer_email,appointment_start,appointment_end,vehicle_type,notes,price_cents,status,services(name),locations(name,slug,address)")
+    .eq("account_id", accountId)
     .gte("appointment_start", formatISO(startOfDay(new Date())))
     .order("appointment_start");
 
@@ -207,17 +200,12 @@ export async function getBookingsData() {
 }
 
 export async function getScheduleData() {
-  if (!hasSupabaseServiceEnv()) {
-    return {
-      mode: "demo" as const,
-      locations: demoLocations as unknown as LocationScheduleRecord[],
-    };
-  }
-
+  const accountId = await getAuthorizedAdminAccountId();
   const supabase = createServiceSupabaseClient();
   const { data: locations } = await supabase
     .from("locations")
-    .select("id,name,slug,address,same_day_cutoff_time")
+    .select("id,name,slug,address,same_day_cutoff_time,capacity,buffer_minutes,is_active")
+    .eq("account_id", accountId)
     .order("name");
 
   const locationIds = (locations ?? []).map((location) => location.id);
@@ -246,7 +234,8 @@ export async function getScheduleData() {
 }
 
 export async function getSettingsData() {
-  const google = await fetchGoogleSettings();
+  const accountId = await getAuthorizedAdminAccountId();
+  const google = await fetchGoogleSettings(accountId);
   const schedule = await getScheduleData();
 
   return {
@@ -267,17 +256,32 @@ export async function getLocationsData() {
     mode: schedule.mode,
     locations: schedule.locations.map((location) => ({
       ...location,
-      active: true,
-      capacity: 2,
-      buffer: location.slug === "mobile" ? "30m" : "15m",
-      hoursSummary: location.slug === "mobile" ? "Mon–Sat • 09:00 — 17:00" : "Mon–Sat • 09:00 — 17:00",
+      active: location.is_active !== false,
+      capacity: location.capacity,
+      buffer: `${location.buffer_minutes}m`,
+      hoursSummary: summarizeHours(location.hours),
       unitsLabel: location.slug === "mobile" ? "units" : "capacity",
-      shortAddress:
-        location.slug === "mobile"
-          ? "25-mile radius from Pikesville base"
-          : location.slug === "towson"
-            ? "1 W Pennsylvania Ave, Towson MD"
-            : "1210 DeRisio Lane, Pikesville MD",
+      shortAddress: location.address ?? "No address saved",
     })),
   };
+}
+
+function summarizeHours(hours: LocationScheduleRecord["hours"]) {
+  const openDays = hours.filter((hour) => !hour.is_closed && hour.open_time && hour.close_time);
+  if (openDays.length === 0) {
+    return "Closed";
+  }
+
+  const sameHours = openDays.every((hour) => hour.open_time === openDays[0]?.open_time && hour.close_time === openDays[0]?.close_time);
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const daySummary =
+    openDays.length === 6 && openDays.every((hour) => hour.day_of_week >= 1 && hour.day_of_week <= 6)
+      ? "Mon-Sat"
+      : openDays.map((hour) => dayNames[hour.day_of_week]).join(", ");
+
+  if (!sameHours) {
+    return `${daySummary} - varied hours`;
+  }
+
+  return `${daySummary} - ${openDays[0]?.open_time} to ${openDays[0]?.close_time}`;
 }

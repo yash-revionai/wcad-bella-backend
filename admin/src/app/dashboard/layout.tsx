@@ -1,12 +1,18 @@
 import { redirect } from "next/navigation";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { StatusBanner } from "@/components/status-banner";
+import { getDevBypassAdmin } from "@/lib/admin-auth";
 import { createServiceSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
-import { hasSupabaseAuthEnv, isDemoMode } from "@/lib/env";
+import { hasSupabaseAuthEnv, hasSupabaseServiceEnv } from "@/lib/env";
 
 async function getCurrentAdmin() {
-  if (!hasSupabaseAuthEnv()) {
-    return { email: "worldclassautodetail@gmail.com", role: "owner", demo: true };
+  const devAdmin = await getDevBypassAdmin();
+  if (devAdmin) {
+    return { email: devAdmin.email, role: devAdmin.role };
+  }
+
+  if (!hasSupabaseAuthEnv() || !hasSupabaseServiceEnv()) {
+    return null;
   }
 
   const supabase = await createServerSupabaseClient();
@@ -18,10 +24,6 @@ async function getCurrentAdmin() {
     return null;
   }
 
-  if (isDemoMode()) {
-    return { email: user.email, role: "owner", demo: true };
-  }
-
   const serviceSupabase = createServiceSupabaseClient();
   const { data: adminUser } = await serviceSupabase
     .from("admin_users")
@@ -30,10 +32,10 @@ async function getCurrentAdmin() {
     .single();
 
   if (!adminUser) {
-    return { email: user.email, role: "unauthorized", demo: false };
+    return { email: user.email, role: "unauthorized" };
   }
 
-  return { ...adminUser, demo: false };
+  return adminUser;
 }
 
 export default async function DashboardLayout({

@@ -9,7 +9,7 @@ export function PwaProvider() {
     }
 
     navigator.serviceWorker.register("/sw.js").catch(() => {
-      // Ignore registration failures in local previews.
+      // Registration can fail on non-secure local origins.
     });
   }, []);
 

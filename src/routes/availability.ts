@@ -12,7 +12,6 @@ function isIsoDateOnly(value: string) {
 }
 
 const availabilityRequestSchema = z.object({
-  accountId: z.string().uuid().optional(),
   service: z.enum(serviceSlugs),
   vehicleType: z.enum(vehicleTypes),
   location: z.enum(locationSlugs),
@@ -26,7 +25,12 @@ availabilityRouter.post("/", validateApiKey, async (req, res, next) => {
     res.json(response);
   } catch (error) {
     if (error instanceof Error && error.name === "ZodError") {
-      next(error);
+      res.json({
+        result:
+          "I did not get enough valid appointment details to check availability. Could I confirm the service, vehicle type, location, and date?",
+        slots: [],
+        agentReaction: "speaks-once"
+      });
       return;
     }
 

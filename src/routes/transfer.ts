@@ -41,6 +41,15 @@ transferRouter.post("/", validateApiKey, async (req, res, next) => {
       agentReaction: "speaks-once"
     });
   } catch (error) {
+    if (error instanceof Error && error.name === "ZodError") {
+      res.json({
+        result: "I can help connect you with our team now. Please hold for just a moment.",
+        transferTo: PRIMARY_NUMBER,
+        agentReaction: "transfer-call"
+      });
+      return;
+    }
+
     next(error);
   }
 });

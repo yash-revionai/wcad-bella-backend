@@ -1,5 +1,7 @@
 import { google, calendar_v3 } from "googleapis";
 import { AppError } from "../lib/errors.js";
+import { logger } from "../lib/logger.js";
+import { monitoring } from "../lib/monitoring.js";
 import { getValidAccessToken } from "./token.js";
 
 function createCalendarClient(accessToken: string) {
@@ -95,6 +97,52 @@ function clearEventCacheForCalendar(accountId: string, calendarId: string) {
   }
 }
 
+export function clearEventCacheForAccount(accountId: string) {
+  for (const key of eventCache.keys()) {
+    if (key.startsWith(`${accountId}:`)) {
+      eventCache.delete(key);
+    }
+  }
+}
+
+function logGoogleCalendarError(
+  error: unknown,
+  operation: GoogleCalendarOperation,
+  context: Record<string, string | number | string[] | undefined> = {}
+) {
+  const status = extractGoogleStatus(error);
+  const message = extractGoogleMessage(error);
+
+  logger.error(
+    {
+      operation,
+      googleStatus: status,
+      googleError: message,
+      ...context
+    },
+    "Google Calendar API error"
+  );
+
+  // Alert on reconnect-required errors
+  if (isReconnectRequiredError(error) && context.accountId) {
+    monitoring.logTokenRefreshFailure({
+      accountId: String(context.accountId),
+      error: `${operation} failed: ${message}`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // Alert on critical operational errors
+  if (context.accountId && (status === 503 || status === 429)) {
+    monitoring.logCalendarError({
+      accountId: String(context.accountId),
+      operation,
+      error: message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
 export type GoogleCalendarSummary = {
   id: string;
   summary: string;
@@ -122,6 +170,7 @@ export async function listGoogleCalendars(accountId: string): Promise<GoogleCale
         accessRole: item.accessRole ?? null
       }));
   } catch (error) {
+    logGoogleCalendarError(error, "list_calendars", { accountId });
     throw toCalendarAppError(error, "list_calendars");
   }
 }
@@ -159,6 +208,7 @@ export async function fetchCalendarEvents(accountId: string, calendarId: string,
 
     return events;
   } catch (error) {
+    logGoogleCalendarError(error, "read_events", { accountId, calendarId });
     throw toCalendarAppError(error, "read_events");
   }
 }
@@ -186,6 +236,7 @@ export async function fetchFreeBusy(accountId: string, calendarIds: string[], ti
 
     return response.data.calendars ?? {};
   } catch (error) {
+    logGoogleCalendarError(error, "read_freebusy", { accountId, calendarIds });
     throw toCalendarAppError(error, "read_freebusy");
   }
 }
@@ -201,21 +252,26 @@ export async function createCalendarEvent(input: {
   try {
     const accessToken = await getValidAccessToken(input.accountId);
     const calendar = createCalendarClient(accessToken);
-    const response = await calendar.events.insert({
-      calendarId: input.calendarId,
-      requestBody: {
-        summary: input.summary,
-        description: input.description ?? null,
-        start: {
-          dateTime: input.startIso,
-          timeZone: "America/New_York"
-        },
-        end: {
-          dateTime: input.endIso,
-          timeZone: "America/New_York"
+    const response = await calendar.events.insert(
+      {
+        calendarId: input.calendarId,
+        requestBody: {
+          summary: input.summary,
+          description: input.description ?? null,
+          start: {
+            dateTime: input.startIso,
+            timeZone: "America/New_York"
+          },
+          end: {
+            dateTime: input.endIso,
+            timeZone: "America/New_York"
+          }
         }
+      },
+      {
+        timeout: 3000
       }
-    });
+    );
 
     if (!response.data.id) {
       throw new AppError("Google Calendar did not return an event ID", 502, "google_calendar_unavailable");
@@ -224,6 +280,7 @@ export async function createCalendarEvent(input: {
     clearEventCacheForCalendar(input.accountId, input.calendarId);
     return response.data;
   } catch (error) {
+    logGoogleCalendarError(error, "create_event", { accountId: input.accountId, calendarId: input.calendarId });
     throw toCalendarAppError(error, "create_event");
   }
 }
@@ -233,12 +290,18 @@ export async function deleteCalendarEvent(accountId: string, calendarId: string,
     const accessToken = await getValidAccessToken(accountId);
     const calendar = createCalendarClient(accessToken);
 
-    await calendar.events.delete({
-      calendarId,
-      eventId
-    });
+    await calendar.events.delete(
+      {
+        calendarId,
+        eventId
+      },
+      {
+        timeout: 3000
+      }
+    );
     clearEventCacheForCalendar(accountId, calendarId);
   } catch (error) {
+    logGoogleCalendarError(error, "delete_event", { accountId, calendarId, eventId });
     throw toCalendarAppError(error, "delete_event");
   }
 }

@@ -1,11 +1,15 @@
+import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getScheduleData } from "@/lib/admin-data";
-import { createOverrideAction, updateLocationSettingsAction } from "../actions";
+import { createOverrideAction, deleteOverrideAction, updateLocationSettingsAction } from "../actions";
+import { ScheduleSkeleton } from "@/components/skeletons/schedule-skeleton";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function SchedulePage(props: { searchParams: SearchParams }) {
+const dayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+async function ScheduleContent(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
   const saved = typeof searchParams.saved === "string" ? searchParams.saved : null;
   const data = await getScheduleData();
@@ -14,7 +18,8 @@ export default async function SchedulePage(props: { searchParams: SearchParams }
   const activeBlocks = data.locations.flatMap((location) =>
     location.overrides.map((override) => ({
       ...override,
-      locationName: location.slug === "towson" ? "Towson" : location.slug === "pikesville" ? "Pikesville" : "All locations",
+      locationId: location.id,
+      locationName: location.slug === "towson" ? "Towson" : location.slug === "pikesville" ? "Pikesville" : "Mobile",
     })),
   );
 
@@ -24,7 +29,9 @@ export default async function SchedulePage(props: { searchParams: SearchParams }
       <div className="px-8 py-7">
         {saved === "hours" ? <div className="mb-5"><StatusBanner kind="success" message="Location hours updated." /></div> : null}
         {saved === "override" ? <div className="mb-5"><StatusBanner kind="success" message="Day override saved." /></div> : null}
-        {saved === "demo" ? <div className="mb-5"><StatusBanner kind="info" message="This action is a demo until admin server env vars are configured." /></div> : null}
+        {saved === "override-removed" ? <div className="mb-5"><StatusBanner kind="success" message="Day override removed." /></div> : null}
+        {saved === "config-error" ? <div className="mb-5"><StatusBanner kind="warning" message="Admin environment is not fully configured." /></div> : null}
+        {saved === "invalid" ? <div className="mb-5"><StatusBanner kind="warning" message="Some schedule values were invalid. Nothing was saved." /></div> : null}
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <section className="panel p-6">
@@ -54,7 +61,11 @@ export default async function SchedulePage(props: { searchParams: SearchParams }
                       <span className="mr-5 font-mono text-[#d8b960]">{new Date(block.override_date).toLocaleDateString("en-US", { month: "short", day: "2-digit" }).toUpperCase()}</span>
                       <span className="mr-4">{block.locationName}</span>
                       <span className="italic text-[#8d8578]">{block.reason ?? "Blocked"}</span>
-                      <span className="float-right text-[#ba5f61]">Remove</span>
+                      <form action={deleteOverrideAction} className="float-right">
+                        <input type="hidden" name="locationId" value={block.locationId} />
+                        <input type="hidden" name="overrideDate" value={block.override_date} />
+                        <button type="submit" className="text-[#ba5f61]">Remove</button>
+                      </form>
                     </div>
                   ))}
                 </div>
@@ -75,69 +86,67 @@ export default async function SchedulePage(props: { searchParams: SearchParams }
         <section className="mt-10">
           <p className="mb-5 font-mono text-[13px] uppercase tracking-[0.22em] text-[#8f8577]">Location hours</p>
           <div className="grid gap-5 xl:grid-cols-3">
-            {primaryLocations.concat(mobileLocation ? [mobileLocation] : []).map((location) => (
-              <form key={location.id} action={updateLocationSettingsAction} className="panel overflow-hidden p-5">
-                <input type="hidden" name="locationId" value={location.id} />
-                <div className="mb-4 flex items-center gap-3">
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${
-                      location.slug === "pikesville" ? "bg-[#d3b149]" : location.slug === "towson" ? "bg-[#6398cc]" : "bg-[#56b989]"
-                    }`}
-                  />
-                  <h3 className="text-[24px] font-semibold text-[#f5f0e8]">
-                    {location.slug === "pikesville" ? "Pikesville" : location.slug === "towson" ? "Towson" : "Mobile"}
-                  </h3>
-                </div>
+            {primaryLocations.concat(mobileLocation ? [mobileLocation] : []).map((location) => {
+              const hoursByDay = new Map(location.hours.map((hour) => [hour.day_of_week, hour]));
 
-                <div className="schedule-hours-shell px-5 py-4">
-                  {location.hours
-                    .filter((hour) => [1, 6, 0].includes(hour.day_of_week))
-                    .sort((a, b) => a.day_of_week - b.day_of_week)
-                    .map((hour) => {
-                      const label = hour.day_of_week === 1 ? "Mon–Fri" : hour.day_of_week === 6 ? "Saturday" : "Sunday";
-                      const defaultOpen = hour.day_of_week === 1 ? "09:00" : hour.open_time ?? "";
-                      const defaultClose = hour.day_of_week === 1 ? "17:00" : hour.close_time ?? "";
+              return (
+                <form key={location.id} action={updateLocationSettingsAction} className="panel overflow-hidden p-5">
+                  <input type="hidden" name="locationId" value={location.id} />
+                  <div className="mb-4 flex items-center gap-3">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        location.slug === "pikesville" ? "bg-[#d3b149]" : location.slug === "towson" ? "bg-[#6398cc]" : "bg-[#56b989]"
+                      }`}
+                    />
+                    <h3 className="text-[24px] font-semibold text-[#f5f0e8]">
+                      {location.slug === "pikesville" ? "Pikesville" : location.slug === "towson" ? "Towson" : "Mobile"}
+                    </h3>
+                  </div>
+
+                  <label className="mb-4 grid gap-2 text-[13px] text-[#b7ad9d]">
+                    Same-day cutoff
+                    <input name="sameDayCutoff" type="time" defaultValue={location.same_day_cutoff_time ?? ""} className="schedule-time-input max-w-full" />
+                  </label>
+
+                  <div className="schedule-hours-shell px-5 py-4">
+                    {dayLabels.map((label, day) => {
+                      const hour = hoursByDay.get(day);
+                      const isClosed = hour?.is_closed ?? day === 0;
+                      const defaultOpen = hour?.open_time ?? (isClosed ? "" : "09:00");
+                      const defaultClose = hour?.close_time ?? (isClosed ? "" : "17:00");
+
                       return (
-                        <div
-                          key={hour.day_of_week}
-                          className={`border-b border-[rgba(255,255,255,0.06)] py-4 last:border-b-0 ${
-                            hour.day_of_week === 0 ? "schedule-hours-row-closed" : "schedule-hours-row"
-                          }`}
-                        >
-                          <span className="text-[18px] text-[#b7ad9d]">{label}</span>
-                          {hour.day_of_week === 0 ? (
-                            <>
-                              <input type="hidden" name={`closed-${hour.day_of_week}`} value="on" />
-                              <span className="text-[16px] font-medium text-[#d56662]">Closed</span>
-                            </>
-                          ) : (
-                            <>
-                              <input
-                                name={`open-${hour.day_of_week}`}
-                                type="time"
-                                defaultValue={defaultOpen}
-                                className="schedule-time-input"
-                              />
-                              <input
-                                name={`close-${hour.day_of_week}`}
-                                type="time"
-                                defaultValue={defaultClose}
-                                className="schedule-time-input"
-                              />
-                            </>
-                          )}
+                        <div key={day} className="grid gap-3 border-b border-[rgba(255,255,255,0.06)] py-4 last:border-b-0">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[18px] text-[#b7ad9d]">{label}</span>
+                            <label className="flex items-center gap-2 text-[13px] uppercase tracking-[0.14em] text-[#8f8577]">
+                              <input type="checkbox" name={`closed-${day}`} defaultChecked={isClosed} className="h-4 w-4 accent-[#d8b960]" />
+                              Closed
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <input name={`open-${day}`} type="time" defaultValue={defaultOpen} className="schedule-time-input w-full" />
+                            <input name={`close-${day}`} type="time" defaultValue={defaultClose} className="schedule-time-input w-full" />
+                          </div>
                         </div>
                       );
                     })}
-                </div>
-
-                <input type="hidden" name="sameDayCutoff" value={location.same_day_cutoff_time ?? ""} />
-                <button type="submit" className="ghost-button mt-4 w-full justify-center text-[#f5f0e8]">Save hours</button>
-              </form>
-            ))}
+                  </div>
+                  <button type="submit" className="ghost-button mt-4 w-full justify-center text-[#f5f0e8]">Save hours</button>
+                </form>
+              );
+            })}
           </div>
         </section>
       </div>
     </div>
+  );
+}
+
+export default function SchedulePage(props: { searchParams: SearchParams }) {
+  return (
+    <Suspense fallback={<ScheduleSkeleton />}>
+      <ScheduleContent searchParams={props.searchParams} />
+    </Suspense>
   );
 }

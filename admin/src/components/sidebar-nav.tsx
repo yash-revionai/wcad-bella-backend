@@ -9,7 +9,7 @@ const sections = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-      { href: "/dashboard/bookings", label: "Bookings", icon: CalendarDays, badge: 7 },
+      { href: "/dashboard/bookings", label: "Bookings", icon: CalendarDays },
     ],
   },
   {
@@ -32,8 +32,8 @@ export function SidebarNav() {
     <>
       <nav className="hidden min-h-screen w-[220px] shrink-0 flex-col border-r border-[rgba(255,255,255,0.06)] bg-[#121216] lg:flex">
         <div className="px-8 py-9">
-          <p className="font-serif text-[24px] font-semibold text-[#d5b655]">YFoundAi</p>
-          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.28em] text-[#9a9382]">Voice Intelligence</p>
+          <p className="font-serif text-[24px] font-semibold text-[#d5b655]">Bella Admin</p>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.28em] text-[#9a9382]">Operations</p>
         </div>
         <div className="border-t border-[rgba(255,255,255,0.06)] px-8 py-5">
           <p className="text-[13px] text-[#9d968a]">Client</p>
@@ -59,11 +59,6 @@ export function SidebarNav() {
                       >
                         <Icon className="h-4 w-4" strokeWidth={1.8} />
                         <span className="flex-1">{item.label}</span>
-                        {"badge" in item && item.badge ? (
-                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d5b655] px-1.5 font-mono text-[11px] text-[#121216]">
-                            {item.badge}
-                          </span>
-                        ) : null}
                       </Link>
                     );
                   })}
@@ -75,7 +70,7 @@ export function SidebarNav() {
         <div className="mt-auto p-12 pt-6">
           <div className="rounded-[6px] border border-[rgba(72,138,108,0.4)] bg-[rgba(18,44,35,0.5)] px-4 py-3 text-[13px] text-[#6bd8a0]">
             <span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#3cd687]" />
-            Bella is live
+            Live data
           </div>
         </div>
       </nav>

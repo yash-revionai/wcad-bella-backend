@@ -9,7 +9,7 @@ import type { LocationSlug, ServiceSlug, VehicleType } from "../config/constants
 const businessZone = "America/New_York";
 const slotStepMinutes = 30;
 const searchDays = 14;
-const configCacheTtlMs = 30_000;
+const configCacheTtlMs = 10_000;
 const availabilityConfigCache = new Map<string, { expiresAt: number; value: Awaited<ReturnType<typeof loadAvailabilityConfigUncached>> }>();
 const hoursCache = new Map<string, { expiresAt: number; value: { openTime: string; closeTime: string } | null }>();
 
@@ -372,41 +372,44 @@ export async function checkAvailability(
   try {
     const preferredDate = parsePreferredDate(request.preferredDate);
     const { account, service, location, durationMinutes } = await dependencies.loadAvailabilityConfig(request);
-    const collectedSlots: DateTime[] = [];
-
-    for (let dayOffset = 0; dayOffset < searchDays && collectedSlots.length < 5; dayOffset += 1) {
-      const date = preferredDate.plus({ days: dayOffset });
-      const hours = await dependencies.loadHoursForDate(location.id, date);
-
-      if (!hours) {
-        continue;
-      }
-
-      const { timeMin, timeMax } = dayBounds(date);
-      const [locationEvents, mainEvents] = await Promise.all([
-        dependencies.fetchCalendarEvents(account.id, location.google_calendar_id!, timeMin, timeMax),
-        dependencies.fetchCalendarEvents(account.id, account.google_main_calendar_id!, timeMin, timeMax)
-      ]);
-
-      const busyRanges = [
-        ...googleEventsToBusyRanges(locationEvents, date),
-        ...googleEventsToBusyRanges(mainEvents, date)
-      ];
-
-      const slotsForDay = generateSlotsForDay({
+    const candidateDates = Array.from({ length: searchDays }, (_value, dayOffset) => preferredDate.plus({ days: dayOffset }));
+    const hoursByDate = await Promise.all(
+      candidateDates.map(async (date) => ({
         date,
-        openTime: hours.openTime,
-        closeTime: hours.closeTime,
-        durationMinutes,
-        bufferMinutes: location.buffer_minutes,
-        capacity: location.capacity,
-        busyRanges,
-        sameDayCutoffTime: location.same_day_cutoff_time,
-        locationSlug: location.slug
-      });
+        hours: await dependencies.loadHoursForDate(location.id, date)
+      }))
+    );
 
-      collectedSlots.push(...slotsForDay);
-    }
+    const slotsByDay = await Promise.all(
+      hoursByDate
+        .filter((entry): entry is { date: DateTime; hours: { openTime: string; closeTime: string } } => Boolean(entry.hours))
+        .map(async ({ date, hours }) => {
+          const { timeMin, timeMax } = dayBounds(date);
+          const [locationEvents, mainEvents] = await Promise.all([
+            dependencies.fetchCalendarEvents(account.id, location.google_calendar_id!, timeMin, timeMax),
+            dependencies.fetchCalendarEvents(account.id, account.google_main_calendar_id!, timeMin, timeMax)
+          ]);
+
+          const busyRanges = [
+            ...googleEventsToBusyRanges(locationEvents, date),
+            ...googleEventsToBusyRanges(mainEvents, date)
+          ];
+
+          return generateSlotsForDay({
+            date,
+            openTime: hours.openTime,
+            closeTime: hours.closeTime,
+            durationMinutes,
+            bufferMinutes: location.buffer_minutes,
+            capacity: location.capacity,
+            busyRanges,
+            sameDayCutoffTime: location.same_day_cutoff_time,
+            locationSlug: location.slug
+          });
+        })
+    );
+
+    const collectedSlots = slotsByDay.flat();
 
     const slots = collectedSlots.slice(0, 5);
 

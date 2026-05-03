@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
   status TEXT DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'completed', 'no_show')),
   google_event_id TEXT,
+  idempotency_key TEXT,
   notes TEXT,
   price_cents INTEGER,
   confirmation_sms_sent BOOLEAN DEFAULT FALSE,
@@ -118,6 +119,8 @@ CREATE TABLE IF NOT EXISTS bookings (
   CHECK (appointment_end > appointment_start)
 );
 
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
 CREATE TABLE IF NOT EXISTS admin_users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID REFERENCES accounts(id) ON DELETE CASCADE,
@@ -126,6 +129,167 @@ CREATE TABLE IF NOT EXISTS admin_users (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE OR REPLACE FUNCTION current_admin_account_id()
+RETURNS UUID
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT account_id
+  FROM public.admin_users
+  WHERE LOWER(email) = LOWER(auth.jwt() ->> 'email')
+  LIMIT 1
+$$;
+
+REVOKE ALL ON FUNCTION current_admin_account_id() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION current_admin_account_id() TO authenticated;
+
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE location_hours ENABLE ROW LEVEL SECURITY;
+ALTER TABLE location_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_durations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pricing ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS accounts_admin_select ON accounts;
+CREATE POLICY accounts_admin_select ON accounts
+FOR SELECT TO authenticated
+USING (id = current_admin_account_id());
+
+DROP POLICY IF EXISTS accounts_admin_update ON accounts;
+CREATE POLICY accounts_admin_update ON accounts
+FOR UPDATE TO authenticated
+USING (id = current_admin_account_id())
+WITH CHECK (id = current_admin_account_id());
+
+DROP POLICY IF EXISTS locations_admin_all ON locations;
+CREATE POLICY locations_admin_all ON locations
+FOR ALL TO authenticated
+USING (account_id = current_admin_account_id())
+WITH CHECK (account_id = current_admin_account_id());
+
+DROP POLICY IF EXISTS location_hours_admin_all ON location_hours;
+CREATE POLICY location_hours_admin_all ON location_hours
+FOR ALL TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM locations
+    WHERE locations.id = location_hours.location_id
+      AND locations.account_id = current_admin_account_id()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM locations
+    WHERE locations.id = location_hours.location_id
+      AND locations.account_id = current_admin_account_id()
+  )
+);
+
+DROP POLICY IF EXISTS location_overrides_admin_all ON location_overrides;
+CREATE POLICY location_overrides_admin_all ON location_overrides
+FOR ALL TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM locations
+    WHERE locations.id = location_overrides.location_id
+      AND locations.account_id = current_admin_account_id()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM locations
+    WHERE locations.id = location_overrides.location_id
+      AND locations.account_id = current_admin_account_id()
+  )
+);
+
+DROP POLICY IF EXISTS services_admin_all ON services;
+CREATE POLICY services_admin_all ON services
+FOR ALL TO authenticated
+USING (account_id = current_admin_account_id())
+WITH CHECK (account_id = current_admin_account_id());
+
+DROP POLICY IF EXISTS service_durations_admin_all ON service_durations;
+CREATE POLICY service_durations_admin_all ON service_durations
+FOR ALL TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM services
+    WHERE services.id = service_durations.service_id
+      AND services.account_id = current_admin_account_id()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM services
+    WHERE services.id = service_durations.service_id
+      AND services.account_id = current_admin_account_id()
+  )
+);
+
+DROP POLICY IF EXISTS service_locations_admin_all ON service_locations;
+CREATE POLICY service_locations_admin_all ON service_locations
+FOR ALL TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM services
+    WHERE services.id = service_locations.service_id
+      AND services.account_id = current_admin_account_id()
+  )
+  AND EXISTS (
+    SELECT 1 FROM locations
+    WHERE locations.id = service_locations.location_id
+      AND locations.account_id = current_admin_account_id()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM services
+    WHERE services.id = service_locations.service_id
+      AND services.account_id = current_admin_account_id()
+  )
+  AND EXISTS (
+    SELECT 1 FROM locations
+    WHERE locations.id = service_locations.location_id
+      AND locations.account_id = current_admin_account_id()
+  )
+);
+
+DROP POLICY IF EXISTS pricing_admin_all ON pricing;
+CREATE POLICY pricing_admin_all ON pricing
+FOR ALL TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM services
+    WHERE services.id = pricing.service_id
+      AND services.account_id = current_admin_account_id()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM services
+    WHERE services.id = pricing.service_id
+      AND services.account_id = current_admin_account_id()
+  )
+);
+
+DROP POLICY IF EXISTS bookings_admin_all ON bookings;
+CREATE POLICY bookings_admin_all ON bookings
+FOR ALL TO authenticated
+USING (account_id = current_admin_account_id())
+WITH CHECK (account_id = current_admin_account_id());
+
+DROP POLICY IF EXISTS admin_users_admin_select ON admin_users;
+CREATE POLICY admin_users_admin_select ON admin_users
+FOR SELECT TO authenticated
+USING (account_id = current_admin_account_id());
+
 CREATE INDEX IF NOT EXISTS idx_locations_account_slug ON locations(account_id, slug);
 CREATE INDEX IF NOT EXISTS idx_location_hours_location_day ON location_hours(location_id, day_of_week);
 CREATE INDEX IF NOT EXISTS idx_location_overrides_location_date ON location_overrides(location_id, override_date);
@@ -133,6 +297,9 @@ CREATE INDEX IF NOT EXISTS idx_services_account_slug ON services(account_id, slu
 CREATE INDEX IF NOT EXISTS idx_bookings_account_start ON bookings(account_id, appointment_start);
 CREATE INDEX IF NOT EXISTS idx_bookings_location_start ON bookings(location_id, appointment_start);
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_account_idempotency_key
+ON bookings(account_id, idempotency_key)
+WHERE idempotency_key IS NOT NULL;
 
 DROP TRIGGER IF EXISTS set_accounts_updated_at ON accounts;
 CREATE TRIGGER set_accounts_updated_at

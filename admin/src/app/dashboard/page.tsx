@@ -1,10 +1,16 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getDashboardData } from "@/lib/admin-data";
 import { formatVehicleLabel } from "@/lib/format";
+import { DashboardSkeleton } from "@/components/skeletons/dashboard-skeleton";
 
-export default async function DashboardPage() {
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
+}
+
+async function DashboardContent() {
   const data = await getDashboardData();
 
   return (
@@ -27,23 +33,23 @@ export default async function DashboardPage() {
             <div>
               <h2 className="text-[18px] font-semibold text-[#f5f0e8]">Bella is active</h2>
               <p className="mt-1 text-[14px] text-[#a99f92]">
-                Answering calls 24/7 · Last call 14 min ago
+                {data.calendarReady ? "Calendar connected and mapped" : "Calendar setup needs attention"}
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-10 text-right">
             <div>
-              <p className="font-serif text-[36px] leading-none text-[#d8b960]">{data.callsThisWeek}</p>
-              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#7e786d]">Calls this week</p>
+              <p className="font-serif text-[36px] leading-none text-[#d8b960]">{data.calendarReady ? "Ready" : "Setup"}</p>
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#7e786d]">Calendar</p>
             </div>
             <div>
               <p className="font-serif text-[36px] leading-none text-[#d8b960]">{data.bookingsWeekCount}</p>
               <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#7e786d]">Booked this week</p>
             </div>
             <div>
-              <p className="font-serif text-[36px] leading-none text-[#d8b960]">{data.bookingRate}%</p>
-              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#7e786d]">Booking rate</p>
+              <p className="font-serif text-[36px] leading-none text-[#d8b960]">{formatMoney(data.revenueThisWeekCents)}</p>
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#7e786d]">Revenue this week</p>
             </div>
           </div>
         </section>
@@ -51,9 +57,9 @@ export default async function DashboardPage() {
         <section className="mb-7 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
             { label: "Today’s bookings", value: data.bookingsTodayCount, sublabel: "Across 3 locations" },
-            { label: "This week", value: data.bookingsWeekCount, sublabel: "↑ 3 from last week" },
-            { label: "Open slots today", value: data.sameDaySlotsRemaining, sublabel: "5 shop · 2 mobile" },
-            { label: "Revenue this week", value: "$3,324", sublabel: "Confirmed bookings" },
+            { label: "This week", value: data.bookingsWeekCount, sublabel: "Confirmed bookings" },
+            { label: "Calendar", value: data.calendarReady ? "Ready" : "Setup", sublabel: data.googleConnected ? "Connected" : "Disconnected" },
+            { label: "Revenue this week", value: formatMoney(data.revenueThisWeekCents), sublabel: "Confirmed bookings" },
           ].map((card) => (
             <article key={card.label} className="panel min-h-[170px] px-6 py-5">
               <p className="font-mono text-[12px] uppercase tracking-[0.22em] text-[#7e786d]">{card.label}</p>
@@ -108,5 +114,13 @@ export default async function DashboardPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardContent />
+    </Suspense>
   );
 }

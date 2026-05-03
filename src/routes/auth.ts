@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { AppError } from "../lib/errors.js";
 import { z } from "zod";
+import { validateAdminApiKey } from "../middleware/auth.js";
 import { resolveAccount } from "../services/accounts.js";
-import { buildGoogleAuthUrl, exchangeGoogleCode } from "../services/token.js";
+import { buildGoogleAuthUrl, exchangeGoogleCode, verifyGoogleAuthState } from "../services/token.js";
 
 export const authRouter = Router();
 
@@ -12,10 +13,23 @@ const accountIdQuerySchema = z.object({
 
 const googleCallbackQuerySchema = z.object({
   code: z.string().min(1),
-  state: z.string().uuid()
+  state: z.string().min(1)
 });
 
-authRouter.get("/google", async (req, res, next) => {
+authRouter.get("/google/url", validateAdminApiKey, async (req, res, next) => {
+  try {
+    const parsed = accountIdQuerySchema.parse({
+      accountId: typeof req.query.accountId === "string" ? req.query.accountId : undefined
+    });
+    const account = await resolveAccount(parsed.accountId);
+    const authUrl = buildGoogleAuthUrl(account.id);
+    res.json({ url: authUrl });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.get("/google", validateAdminApiKey, async (req, res, next) => {
   try {
     const parsed = accountIdQuerySchema.parse({
       accountId: typeof req.query.accountId === "string" ? req.query.accountId : undefined
@@ -35,7 +49,8 @@ authRouter.get("/google/callback", async (req, res, next) => {
       state: typeof req.query.state === "string" ? req.query.state : undefined
     });
 
-    await exchangeGoogleCode(parsed.state, parsed.code);
+    const accountId = verifyGoogleAuthState(parsed.state);
+    await exchangeGoogleCode(accountId, parsed.code);
 
     res.status(200).send(`
       <!doctype html>

@@ -6,6 +6,7 @@ import { formatPhoneForDisplay } from "../lib/phone.js";
 const businessPhoneDisplay = "(443) 957-4789";
 const businessPhoneSms = "443-957-4789";
 const businessZone = "America/New_York";
+const notificationTimeoutMs = 5_000;
 
 export type ConfirmationDetails = {
   customerName: string;
@@ -66,6 +67,14 @@ export function buildSmsConfirmation(details: ConfirmationDetails) {
   return `WCAD Appointment Confirmed! ${details.serviceName} for your ${titleCaseVehicleType(details.vehicleType)} at ${details.locationName} on ${formatAppointment(details)}. Questions? Call ${businessPhoneSms}. Reply STOP to opt out.`;
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit) {
+  const signal = AbortSignal.timeout(notificationTimeoutMs);
+  return fetch(url, {
+    ...init,
+    signal
+  });
+}
+
 export async function sendEmailConfirmation(details: ConfirmationDetails) {
   if (!details.customerEmail) {
     return false;
@@ -77,7 +86,7 @@ export async function sendEmailConfirmation(details: ConfirmationDetails) {
   }
 
   const email = buildEmailConfirmation(details);
-  const response = await fetch("https://api.resend.com/emails", {
+  const response = await fetchWithTimeout("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
@@ -112,7 +121,7 @@ export async function sendSmsConfirmation(details: ConfirmationDetails) {
     Body: buildSmsConfirmation(details)
   });
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`,
     {
       method: "POST",
@@ -127,6 +136,37 @@ export async function sendSmsConfirmation(details: ConfirmationDetails) {
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Twilio request failed with ${response.status}: ${body}`);
+  }
+
+  return true;
+}
+
+export async function sendDeveloperAlert(input: { subject: string; text: string }) {
+  if (!env.RESEND_API_KEY || !env.DEVELOPER_ALERT_EMAIL) {
+    logger.warn(
+      { hasResendKey: Boolean(env.RESEND_API_KEY), hasDeveloperAlertEmail: Boolean(env.DEVELOPER_ALERT_EMAIL) },
+      "Skipping developer alert because alert email configuration is missing"
+    );
+    return false;
+  }
+
+  const response = await fetchWithTimeout("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: "Bella Alerts <alerts@worldclassautodetail.com>",
+      to: [env.DEVELOPER_ALERT_EMAIL],
+      subject: input.subject,
+      text: input.text
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend alert request failed with ${response.status}: ${body}`);
   }
 
   return true;

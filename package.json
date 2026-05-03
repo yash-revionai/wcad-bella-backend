@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test dist/test/**/*.test.js",
+    "test": "ADMIN_API_KEY=test-admin-api-key node --test dist/test/**/*.test.js",
     "seed": "tsx database/seed.ts"
   },
   "engines": {

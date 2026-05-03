@@ -1,8 +1,11 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { google } from "googleapis";
 import { AppError } from "../lib/errors.js";
 import { decryptSecret, encryptSecret } from "../lib/encryption.js";
-import { requireGoogleEnv } from "../lib/env.js";
+import { requireEnv, requireGoogleEnv } from "../lib/env.js";
+import { logger } from "../lib/logger.js";
 import { clearGoogleTokens, getAccount, updateGoogleTokens } from "./accounts.js";
+import { sendDeveloperAlert } from "./notifications.js";
 
 const calendarScopes = [
   "https://www.googleapis.com/auth/calendar.readonly",
@@ -14,6 +17,26 @@ export function createOAuthClient() {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
+function signGoogleAuthState(accountId: string) {
+  return createHmac("sha256", requireEnv("ADMIN_API_KEY")).update(accountId).digest("base64url");
+}
+
+export function verifyGoogleAuthState(state: string) {
+  const [accountId, signature] = state.split(".");
+  if (!accountId || !signature) {
+    throw new AppError("Invalid Google OAuth state", 400);
+  }
+
+  const expectedSignature = signGoogleAuthState(accountId);
+  const provided = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+    throw new AppError("Invalid Google OAuth state", 400);
+  }
+
+  return accountId;
+}
+
 export function buildGoogleAuthUrl(accountId: string) {
   const oauth2Client = createOAuthClient();
 
@@ -21,7 +44,7 @@ export function buildGoogleAuthUrl(accountId: string) {
     access_type: "offline",
     prompt: "consent",
     scope: calendarScopes,
-    state: accountId
+    state: `${accountId}.${signGoogleAuthState(accountId)}`
   });
 }
 
@@ -87,6 +110,20 @@ export async function getValidAccessToken(accountId: string) {
     return credentials.access_token;
   } catch (error) {
     await clearGoogleTokens(accountId);
+    try {
+      await sendDeveloperAlert({
+        subject: "Bella Google Calendar reconnect required",
+        text: [
+          "Google Calendar access failed and tokens were cleared.",
+          `Account: ${account.business_name} (${account.email})`,
+          `Account ID: ${account.id}`,
+          "Action needed: reconnect Google Calendar in Bella admin."
+        ].join("\n")
+      });
+    } catch (alertError) {
+      // Do not mask the reconnect-required error Bella/admin needs to see.
+      logger.error({ error: alertError, accountId }, "Developer Google reconnect alert failed");
+    }
     throw new AppError(
       "Google Calendar access has expired or been revoked. Reconnect Google Calendar in admin and try again.",
       409,

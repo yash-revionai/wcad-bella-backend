@@ -6,7 +6,8 @@ import type { IncomingMessage } from "node:http";
 import { env } from "./lib/env.js";
 import { isAppError } from "./lib/errors.js";
 import { logger } from "./lib/logger.js";
-import { apiRateLimit } from "./middleware/rateLimit.js";
+import { validateAdminApiKey } from "./middleware/auth.js";
+import { apiRateLimit, bookingRateLimit } from "./middleware/rateLimit.js";
 import { availabilityRouter } from "./routes/availability.js";
 import { authRouter } from "./routes/auth.js";
 import { bookingRouter } from "./routes/booking.js";
@@ -43,10 +44,10 @@ export function createApp() {
 
   app.use("/api/health", healthRouter);
   app.use("/api/availability", availabilityRouter);
-  app.use("/api/booking", bookingRouter);
+  app.use("/api/booking", bookingRateLimit, bookingRouter);
   app.use("/api/transfer", transferRouter);
   app.use("/api/auth", authRouter);
-  app.use("/api/google", googleRouter);
+  app.use("/api/google", validateAdminApiKey, googleRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: "Not found" });

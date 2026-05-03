@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { DateTime } from "luxon";
 import { AppError, isAppError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import { monitoring } from "../lib/monitoring.js";
 import { normalizeUsPhoneNumber } from "../lib/phone.js";
 import { createServiceSupabaseClient } from "../lib/supabase.js";
 import type { LocationSlug, ServiceSlug, VehicleType } from "../config/constants.js";
@@ -19,6 +21,7 @@ export type BookingRequest = {
   vehicleType: VehicleType;
   location: LocationSlug;
   appointmentStart: string;
+  idempotencyKey?: string | undefined;
   notes?: string | null | undefined;
   accountId?: string | undefined;
 };
@@ -79,18 +82,12 @@ function applyTime(date: DateTime, time: string) {
 }
 
 function buildCalendarDescription(input: {
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string | null;
   serviceName: string;
   vehicleType: VehicleType;
   locationName: string;
   notes?: string | null;
 }) {
   return [
-    `Customer: ${input.customerName}`,
-    `Phone: ${input.customerPhone}`,
-    input.customerEmail ? `Email: ${input.customerEmail}` : null,
     `Service: ${input.serviceName}`,
     `Vehicle: ${input.vehicleType}`,
     `Location: ${input.locationName}`,
@@ -98,6 +95,66 @@ function buildCalendarDescription(input: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildBookingIdempotencyKey(input: {
+  accountId: string;
+  locationId: string;
+  serviceId: string;
+  vehicleType: VehicleType;
+  customerPhone: string;
+  appointmentStartUtc: string;
+  clientKey?: string | undefined;
+}) {
+  if (input.clientKey) {
+    return `client:${input.clientKey}`;
+  }
+
+  return createHash("sha256")
+    .update(
+      [
+        input.accountId,
+        input.locationId,
+        input.serviceId,
+        input.vehicleType,
+        input.customerPhone,
+        input.appointmentStartUtc
+      ].join("|")
+    )
+    .digest("hex");
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+}
+
+async function findExistingBookingByIdempotencyKey(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+  idempotencyKey: string
+) {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("account_id", accountId)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as { id: string } | null;
+}
+
+function bookingConfirmedResponse(bookingId: string, hasCustomerEmail = false) {
+  const confirmationChannelText = hasCustomerEmail ? "by text and email shortly" : "by text shortly";
+
+  return {
+    result: `The appointment is confirmed. Let the caller know their booking is set, they will receive a confirmation ${confirmationChannelText}, and that a credit card is needed to hold the appointment but there is no charge until after the service is complete.`,
+    bookingId,
+    agentReaction: "speaks-once"
+  };
 }
 
 async function loadHoursForDate(locationId: string, date: DateTime) {
@@ -299,15 +356,29 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
     const normalizedPhone = normalizeUsPhoneNumber(request.callerPhone);
     const config = await dependencies.loadBookingConfig(request);
     const appointmentEnd = await dependencies.assertSlotStillAvailable(config, appointmentStart);
+    const appointmentStartUtc = appointmentStart.toUTC().toISO({ suppressMilliseconds: true })!;
+    const supabase = dependencies.createServiceSupabaseClient();
+    const idempotencyKey = buildBookingIdempotencyKey({
+      accountId: config.account.id,
+      locationId: config.location.id,
+      serviceId: config.service.id,
+      vehicleType: request.vehicleType,
+      customerPhone: normalizedPhone,
+      appointmentStartUtc,
+      clientKey: request.idempotencyKey
+    });
+    const existingBooking = await findExistingBookingByIdempotencyKey(supabase, config.account.id, idempotencyKey);
+
+    if (existingBooking) {
+      logger.info({ bookingId: existingBooking.id, idempotencyKey }, "Booking idempotency replayed");
+      return bookingConfirmedResponse(existingBooking.id, Boolean(request.callerEmail));
+    }
 
     const calendarEvent = await dependencies.createCalendarEvent({
       accountId: config.account.id,
       calendarId: config.location.google_calendar_id!,
       summary: `${config.service.name} - ${request.callerName}`,
       description: buildCalendarDescription({
-        customerName: request.callerName,
-        customerPhone: normalizedPhone,
-        customerEmail: request.callerEmail ?? null,
         serviceName: config.service.name,
         vehicleType: request.vehicleType,
         locationName: config.location.name,
@@ -317,7 +388,6 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
       endIso: appointmentEnd.toISO({ suppressMilliseconds: true })!
     });
 
-    const supabase = dependencies.createServiceSupabaseClient();
     let bookingId: string;
 
     try {
@@ -331,17 +401,31 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
           customer_name: request.callerName,
           customer_phone: normalizedPhone,
           customer_email: request.callerEmail ?? null,
-          appointment_start: appointmentStart.toUTC().toISO({ suppressMilliseconds: true }),
+          appointment_start: appointmentStartUtc,
           appointment_end: appointmentEnd.toUTC().toISO({ suppressMilliseconds: true }),
           duration_minutes: config.durationMinutes,
           google_event_id: calendarEvent.id,
           notes: request.notes ?? null,
-          price_cents: config.priceCents
+          price_cents: config.priceCents,
+          idempotency_key: idempotencyKey
         })
         .select("id")
         .single();
 
       if (bookingError || !booking) {
+        if (isUniqueConstraintError(bookingError)) {
+          const duplicateBooking = await findExistingBookingByIdempotencyKey(supabase, config.account.id, idempotencyKey);
+          if (duplicateBooking) {
+            try {
+              await dependencies.deleteCalendarEvent(config.account.id, config.location.google_calendar_id!, calendarEvent.id!);
+            } catch (cleanupError) {
+              logger.error({ error: cleanupError, calendarEventId: calendarEvent.id }, "Duplicate booking calendar cleanup failed");
+            }
+            bookingId = duplicateBooking.id;
+            return bookingConfirmedResponse(bookingId, Boolean(request.callerEmail));
+          }
+        }
+
         throw new Error(bookingError?.message ?? "Unknown booking insert failure");
       }
 
@@ -368,17 +452,74 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
 
     let confirmationSmsSent = false;
     let confirmationEmailSent = false;
+    let smsError: Error | null = null;
+    let emailError: Error | null = null;
 
     try {
       confirmationSmsSent = await dependencies.sendSmsConfirmation(confirmationDetails);
     } catch (error) {
-      logger.error({ error, bookingId }, "SMS confirmation failed");
+      smsError = error instanceof Error ? error : new Error(String(error));
+      logger.error({ error: smsError, bookingId }, "SMS confirmation failed");
+      monitoring.logSmsFailure({
+        to: normalizedPhone,
+        message: `${config.service.name} on ${appointmentStart.toLocaleString()}`,
+        error: smsError.message,
+        timestamp: new Date().toISOString(),
+      });
     }
 
     try {
       confirmationEmailSent = await dependencies.sendEmailConfirmation(confirmationDetails);
     } catch (error) {
-      logger.error({ error, bookingId }, "Email confirmation failed");
+      emailError = error instanceof Error ? error : new Error(String(error));
+      logger.error({ error: emailError, bookingId }, "Email confirmation failed");
+      if (request.callerEmail) {
+        monitoring.logEmailFailure({
+          to: request.callerEmail,
+          subject: `${config.service.name} Appointment Confirmation - ${appointmentStart.toLocaleString()}`,
+          error: emailError.message,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    // Alert if both confirmations failed
+    if (!confirmationSmsSent && !confirmationEmailSent) {
+      monitoring.logConfirmationFailure({
+        bookingId,
+        customerId: config.account.id,
+        customerPhone: normalizedPhone,
+        service: config.service.name,
+        location: config.location.name,
+        appointmentStart: appointmentStart.toISO({ suppressMilliseconds: true })!,
+        failureType: "both",
+        failureMessage: `SMS error: ${smsError?.message}; Email error: ${emailError?.message}`,
+        timestamp: new Date().toISOString(),
+      });
+    } else if (!confirmationSmsSent && smsError) {
+      monitoring.logConfirmationFailure({
+        bookingId,
+        customerId: config.account.id,
+        customerPhone: normalizedPhone,
+        service: config.service.name,
+        location: config.location.name,
+        appointmentStart: appointmentStart.toISO({ suppressMilliseconds: true })!,
+        failureType: "sms",
+        failureMessage: smsError.message,
+        timestamp: new Date().toISOString(),
+      });
+    } else if (!confirmationEmailSent && emailError) {
+      monitoring.logConfirmationFailure({
+        bookingId,
+        customerId: config.account.id,
+        customerPhone: normalizedPhone,
+        service: config.service.name,
+        location: config.location.name,
+        appointmentStart: appointmentStart.toISO({ suppressMilliseconds: true })!,
+        failureType: "email",
+        failureMessage: emailError.message,
+        timestamp: new Date().toISOString(),
+      });
     }
 
     await supabase
@@ -389,12 +530,20 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
       })
       .eq("id", bookingId);
 
-    return {
-      result:
-        "The appointment is confirmed. Let the caller know their booking is set, they will receive a confirmation by text and email shortly, and that a credit card is needed to hold the appointment but there is no charge until after the service is complete.",
-      bookingId,
-      agentReaction: "speaks-once"
-    };
+    logger.info(
+      {
+        bookingId,
+        accountId: config.account.id,
+        locationId: config.location.id,
+        serviceId: config.service.id,
+        appointmentStart: appointmentStart.toUTC().toISO({ suppressMilliseconds: true }),
+        confirmationSmsSent,
+        confirmationEmailSent
+      },
+      "Booking confirmed"
+    );
+
+    return bookingConfirmedResponse(bookingId, Boolean(request.callerEmail));
   } catch (error) {
     if (error instanceof AppError && error.statusCode === 200) {
       return {

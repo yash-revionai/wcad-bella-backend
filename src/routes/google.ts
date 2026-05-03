@@ -4,7 +4,7 @@ import { AppError } from "../lib/errors.js";
 import { createServiceSupabaseClient } from "../lib/supabase.js";
 import { locationSlugs } from "../config/constants.js";
 import { clearCalendarMappings, clearGoogleTokens, resolveAccount } from "../services/accounts.js";
-import { listGoogleCalendars } from "../services/calendar.js";
+import { clearEventCacheForAccount, listGoogleCalendars } from "../services/calendar.js";
 import { calendarScopesForDisplay } from "../services/token.js";
 
 export const googleRouter = Router();
@@ -108,6 +108,7 @@ googleRouter.put("/mapping", async (req, res, next) => {
       }
     }
 
+    clearEventCacheForAccount(account.id);
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -122,6 +123,7 @@ googleRouter.delete("/connection", async (req, res, next) => {
     const account = await resolveAccount(parsed.accountId);
     await clearGoogleTokens(account.id);
     await clearCalendarMappings(account.id);
+    clearEventCacheForAccount(account.id);
 
     res.json({
       ok: true,

@@ -8,3 +8,10 @@ export const apiRateLimit = rateLimit({
   message: { error: "Too many requests" }
 });
 
+export const bookingRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many booking requests" }
+});

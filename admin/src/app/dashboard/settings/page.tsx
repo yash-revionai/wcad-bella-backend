@@ -1,16 +1,18 @@
-import Link from "next/link";
-import { CalendarDays, MoreHorizontal } from "lucide-react";
+import { Suspense } from "react";
+import { CalendarDays } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getSettingsData } from "@/lib/admin-data";
-import { disconnectGoogleAction, saveGoogleMappingAction } from "../actions";
+import { connectGoogleAction, disconnectGoogleAction, saveGoogleMappingAction } from "../actions";
+import { SettingsSkeleton } from "@/components/skeletons/settings-skeleton";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function SettingsPage(props: { searchParams: SearchParams }) {
+async function SettingsContent(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
   const saved = typeof searchParams.saved === "string" ? searchParams.saved : null;
   const data = await getSettingsData();
+  const mappedLocationCount = data.google.locations.filter((location) => Boolean(location.google_calendar_id)).length;
 
   return (
     <div className="min-h-screen">
@@ -18,7 +20,8 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
       <div className="px-8 py-7">
         {saved === "mapping" ? <div className="mb-5"><StatusBanner kind="success" message="Calendar mapping saved." /></div> : null}
         {saved === "disconnect" ? <div className="mb-5"><StatusBanner kind="success" message="Google Calendar disconnected." /></div> : null}
-        {saved === "demo" ? <div className="mb-5"><StatusBanner kind="info" message="This action is a demo until backend env vars are configured." /></div> : null}
+        {saved === "config-error" ? <div className="mb-5"><StatusBanner kind="warning" message="Backend admin environment variables are missing." /></div> : null}
+        {saved === "google-error" ? <div className="mb-5"><StatusBanner kind="warning" message="Google Calendar could not be connected. Check backend admin credentials and try again." /></div> : null}
 
         <div className="grid max-w-[860px] gap-4">
           <section className="panel p-6">
@@ -34,20 +37,24 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
                   </div>
                   <div>
                     <p className="text-[18px] font-semibold text-[#f5f0e8]">
-                      {data.google.connected ? "Connected — 3 location calendars active" : "Google Calendar disconnected"}
+                      {data.google.connected
+                        ? `Connected - ${mappedLocationCount}/3 location calendars mapped`
+                        : "Google Calendar disconnected"}
                     </p>
                     <p className="text-[15px] text-[#b7ab98]">worldclassautodetail@gmail.com</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   {data.google.backendUrl ? (
-                    <Link href={`${data.google.backendUrl}/api/auth/google`} className="ghost-button text-[#f5f0e8]">
-                      Reconnect
-                    </Link>
+                    <form action={connectGoogleAction}>
+                      <button type="submit" className="ghost-button text-[#f5f0e8]">Reconnect</button>
+                    </form>
                   ) : null}
-                  <form action={disconnectGoogleAction}>
-                    <button type="submit" className="ghost-button text-[#f5f0e8]">Disconnect</button>
-                  </form>
+                  {data.google.backendUrl ? (
+                    <form action={disconnectGoogleAction}>
+                      <button type="submit" className="ghost-button text-[#f5f0e8]">Disconnect</button>
+                    </form>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -103,12 +110,12 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
           <section className="panel p-6">
             <h2 className="text-[28px] font-semibold text-[#f5f0e8]">Bella — Voice Agent</h2>
             <p className="mt-2 text-[16px] leading-7 text-[#a69b8d]">
-              Ultravox voice agent answering all inbound calls for World Class Auto Detail.
+              Transfer and notification readiness from the live backend configuration.
             </p>
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               <div className="rounded-[8px] bg-[#26252d] px-4 py-4">
-                <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#80786b]">Status</p>
-                <p className="mt-4 text-[22px] text-[#67cb96]">• Active</p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#80786b]">Backend</p>
+                <p className="mt-4 text-[22px] text-[#67cb96]">{data.google.backendUrl ? "Connected" : "Missing"}</p>
               </div>
               <div className="rounded-[8px] bg-[#26252d] px-4 py-4">
                 <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#80786b]">Transfer — Primary</p>
@@ -122,14 +129,9 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
           </section>
 
           <section className="panel p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-[28px] font-semibold text-[#f5f0e8]">Notifications</h2>
-                <p className="mt-2 text-[16px] leading-7 text-[#a69b8d]">What customers receive after Bella confirms a booking.</p>
-              </div>
-              <button className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#26252d] text-[#9c9487]">
-                <MoreHorizontal className="h-5 w-5" />
-              </button>
+            <div>
+              <h2 className="text-[28px] font-semibold text-[#f5f0e8]">Notifications</h2>
+              <p className="mt-2 text-[16px] leading-7 text-[#a69b8d]">What customers receive after Bella confirms a booking.</p>
             </div>
 
             <div className="mt-5 grid gap-3">
@@ -160,5 +162,13 @@ export default async function SettingsPage(props: { searchParams: SearchParams }
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage(props: { searchParams: SearchParams }) {
+  return (
+    <Suspense fallback={<SettingsSkeleton />}>
+      <SettingsContent searchParams={props.searchParams} />
+    </Suspense>
   );
 }

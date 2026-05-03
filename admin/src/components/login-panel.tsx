@@ -1,16 +1,15 @@
 "use client";
 
-import { LoaderCircle, LogIn, Sparkles } from "lucide-react";
-import Link from "next/link";
+import { LoaderCircle, LogIn } from "lucide-react";
 import { useState, useTransition } from "react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 
 type LoginPanelProps = {
   authEnabled: boolean;
-  backendPreviewHref: string;
+  missingEnv: string[];
 };
 
-export function LoginPanel({ authEnabled, backendPreviewHref }: LoginPanelProps) {
+export function LoginPanel({ authEnabled, missingEnv }: LoginPanelProps) {
   const [email, setEmail] = useState("worldclassautodetail@gmail.com");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -44,7 +43,7 @@ export function LoginPanel({ authEnabled, backendPreviewHref }: LoginPanelProps)
       <div className="flex items-center justify-between">
         <span className="eyebrow">Bella Admin</span>
         <span className="rounded-full border border-[rgba(245,240,232,0.12)] bg-[rgba(245,240,232,0.04)] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[var(--color-muted)]">
-          Phase 5
+          Live
         </span>
       </div>
 
@@ -82,12 +81,16 @@ export function LoginPanel({ authEnabled, backendPreviewHref }: LoginPanelProps)
       ) : (
         <div className="grid gap-4">
           <div className="rounded-[8px] border border-[rgba(201,168,76,0.24)] bg-[rgba(201,168,76,0.08)] p-4 text-sm leading-7 text-[var(--color-foreground)]">
-            Supabase admin auth is not configured in this environment yet, so the app is showing its demo shell. The live dashboard layout and forms are ready.
+            Live admin auth is not configured yet. Add the missing values below, restart the admin server, then sign in.
           </div>
-          <Link href={backendPreviewHref} className="action-button justify-center">
-            <Sparkles className="h-4 w-4" />
-            <span>Open dashboard preview</span>
-          </Link>
+          <div className="rounded-[8px] border border-[rgba(245,240,232,0.08)] bg-[rgba(245,240,232,0.03)] p-4">
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-muted)]">Missing env</p>
+            <ul className="mt-3 grid gap-2 text-sm text-[var(--color-foreground)]">
+              {missingEnv.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
 

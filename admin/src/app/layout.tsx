@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Mono, DM_Sans, DM_Serif_Display } from "next/font/google";
+import { NavigationProgress } from "@/components/navigation-progress";
 import { PwaProvider } from "@/components/pwa-provider";
 import "./globals.css";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-full bg-[var(--color-background)] text-[var(--color-foreground)]"
       >
+        <NavigationProgress />
         <PwaProvider />
         {children}
       </body>
