@@ -1,0 +1,244 @@
+import { google, calendar_v3 } from "googleapis";
+import { AppError } from "../lib/errors.js";
+import { getValidAccessToken } from "./token.js";
+
+function createCalendarClient(accessToken: string) {
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+  return google.calendar({ version: "v3", auth });
+}
+
+const eventCacheTtlMs = 30_000;
+const eventCache = new Map<string, { expiresAt: number; events: calendar_v3.Schema$Event[] }>();
+
+type GoogleCalendarOperation =
+  | "list_calendars"
+  | "read_events"
+  | "read_freebusy"
+  | "create_event"
+  | "delete_event";
+
+function extractGoogleStatus(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  if ("code" in error && typeof error.code === "number") {
+    return error.code;
+  }
+
+  if ("response" in error && typeof error.response === "object" && error.response !== null) {
+    const response = error.response as { status?: unknown };
+    return typeof response.status === "number" ? response.status : undefined;
+  }
+
+  return undefined;
+}
+
+function extractGoogleMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return typeof error === "string" ? error : "";
+}
+
+function isReconnectRequiredError(error: unknown) {
+  const status = extractGoogleStatus(error);
+  const message = extractGoogleMessage(error).toLowerCase();
+
+  return (
+    status === 401 ||
+    status === 403 ||
+    message.includes("invalid_grant") ||
+    message.includes("invalid credentials") ||
+    message.includes("insufficient authentication scopes") ||
+    message.includes("access token") ||
+    message.includes("oauth")
+  );
+}
+
+function toCalendarAppError(error: unknown, operation: GoogleCalendarOperation) {
+  if (error instanceof AppError) {
+    return error;
+  }
+
+  if (isReconnectRequiredError(error)) {
+    return new AppError(
+      "Google Calendar access has expired or been revoked. Reconnect Google Calendar in admin and try again.",
+      409,
+      "google_calendar_reconnect_required"
+    );
+  }
+
+  const status = extractGoogleStatus(error);
+  const operationLabel = {
+    list_calendars: "load Google calendars",
+    read_events: "read Google Calendar events",
+    read_freebusy: "read Google Calendar availability",
+    create_event: "create a Google Calendar booking",
+    delete_event: "remove a Google Calendar booking"
+  }[operation];
+
+  if (status === 429) {
+    return new AppError(`Google Calendar is rate limiting requests right now. Unable to ${operationLabel}.`, 503, "google_calendar_rate_limited");
+  }
+
+  return new AppError(`Google Calendar is temporarily unavailable. Unable to ${operationLabel}.`, 503, "google_calendar_unavailable");
+}
+
+function clearEventCacheForCalendar(accountId: string, calendarId: string) {
+  for (const key of eventCache.keys()) {
+    if (key.startsWith(`${accountId}:${calendarId}:`)) {
+      eventCache.delete(key);
+    }
+  }
+}
+
+export type GoogleCalendarSummary = {
+  id: string;
+  summary: string;
+  primary: boolean;
+  accessRole: string | null;
+};
+
+export async function listGoogleCalendars(accountId: string): Promise<GoogleCalendarSummary[]> {
+  try {
+    const accessToken = await getValidAccessToken(accountId);
+    const calendar = createCalendarClient(accessToken);
+    const response = await calendar.calendarList.list({
+      minAccessRole: "reader",
+      showHidden: true
+    });
+
+    return (response.data.items ?? [])
+      .filter((item): item is calendar_v3.Schema$CalendarListEntry & { id: string; summary: string } => {
+        return Boolean(item.id && item.summary);
+      })
+      .map((item) => ({
+        id: item.id,
+        summary: item.summary,
+        primary: item.primary === true,
+        accessRole: item.accessRole ?? null
+      }));
+  } catch (error) {
+    throw toCalendarAppError(error, "list_calendars");
+  }
+}
+
+export async function fetchCalendarEvents(accountId: string, calendarId: string, timeMin: string, timeMax: string) {
+  const cacheKey = [accountId, calendarId, timeMin, timeMax].join(":");
+  const cached = eventCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.events;
+  }
+
+  try {
+    const accessToken = await getValidAccessToken(accountId);
+    const calendar = createCalendarClient(accessToken);
+    const response = await calendar.events.list(
+      {
+        calendarId,
+        timeMin,
+        timeMax,
+        singleEvents: true,
+        orderBy: "startTime",
+        maxResults: 2500
+      },
+      {
+        timeout: 3000
+      }
+    );
+
+    const events = response.data.items ?? [];
+    eventCache.set(cacheKey, {
+      expiresAt: Date.now() + eventCacheTtlMs,
+      events
+    });
+
+    return events;
+  } catch (error) {
+    throw toCalendarAppError(error, "read_events");
+  }
+}
+
+export async function fetchFreeBusy(accountId: string, calendarIds: string[], timeMin: string, timeMax: string) {
+  if (calendarIds.length === 0) {
+    throw new AppError("At least one calendar ID is required", 400);
+  }
+
+  try {
+    const accessToken = await getValidAccessToken(accountId);
+    const calendar = createCalendarClient(accessToken);
+    const response = await calendar.freebusy.query(
+      {
+        requestBody: {
+          timeMin,
+          timeMax,
+          items: calendarIds.map((id) => ({ id }))
+        }
+      },
+      {
+        timeout: 3000
+      }
+    );
+
+    return response.data.calendars ?? {};
+  } catch (error) {
+    throw toCalendarAppError(error, "read_freebusy");
+  }
+}
+
+export async function createCalendarEvent(input: {
+  accountId: string;
+  calendarId: string;
+  summary: string;
+  description?: string | null | undefined;
+  startIso: string;
+  endIso: string;
+}) {
+  try {
+    const accessToken = await getValidAccessToken(input.accountId);
+    const calendar = createCalendarClient(accessToken);
+    const response = await calendar.events.insert({
+      calendarId: input.calendarId,
+      requestBody: {
+        summary: input.summary,
+        description: input.description ?? null,
+        start: {
+          dateTime: input.startIso,
+          timeZone: "America/New_York"
+        },
+        end: {
+          dateTime: input.endIso,
+          timeZone: "America/New_York"
+        }
+      }
+    });
+
+    if (!response.data.id) {
+      throw new AppError("Google Calendar did not return an event ID", 502, "google_calendar_unavailable");
+    }
+
+    clearEventCacheForCalendar(input.accountId, input.calendarId);
+    return response.data;
+  } catch (error) {
+    throw toCalendarAppError(error, "create_event");
+  }
+}
+
+export async function deleteCalendarEvent(accountId: string, calendarId: string, eventId: string) {
+  try {
+    const accessToken = await getValidAccessToken(accountId);
+    const calendar = createCalendarClient(accessToken);
+
+    await calendar.events.delete({
+      calendarId,
+      eventId
+    });
+    clearEventCacheForCalendar(accountId, calendarId);
+  } catch (error) {
+    throw toCalendarAppError(error, "delete_event");
+  }
+}
