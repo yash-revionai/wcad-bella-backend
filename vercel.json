@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd admin && npm run build",
-  "installCommand": "cd admin && npm install",
-  "outputDirectory": "admin/.next"
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": ".next"
 }
