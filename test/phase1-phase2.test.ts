@@ -46,7 +46,7 @@ test("GET /api/health returns service status", async () => {
 test("GET /api/time returns current business time for Bella", async () => {
   const response = await request(app).get("/api/time").set("x-api-key", bellaApiKey).expect(200);
 
-  assert.equal(response.body.timezone, "America/New_York");
+  assert.equal(response.body.timezone, "Asia/Kolkata");
   assert.match(response.body.nowIso, /^\d{4}-\d{2}-\d{2}T/);
   assert.match(response.body.today, /^\d{4}-\d{2}-\d{2}$/);
   assert.match(response.body.tomorrow, /^\d{4}-\d{2}-\d{2}$/);
