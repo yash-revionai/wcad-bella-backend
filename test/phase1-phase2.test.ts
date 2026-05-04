@@ -43,6 +43,23 @@ test("GET /api/health returns service status", async () => {
   assert.match(response.body.timestamp, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test("GET /api/time returns current business time for Bella", async () => {
+  const response = await request(app).get("/api/time").set("x-api-key", bellaApiKey).expect(200);
+
+  assert.equal(response.body.timezone, "America/New_York");
+  assert.match(response.body.nowIso, /^\d{4}-\d{2}-\d{2}T/);
+  assert.match(response.body.today, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(response.body.tomorrow, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(response.body.mobileSameDayCutoffTime, "14:00");
+  assert.equal(typeof response.body.isAfterMobileSameDayCutoff, "boolean");
+  assert.match(response.body.result, /current business date/i);
+});
+
+test("GET /api/time requires Bella API key", async () => {
+  const response = await request(app).get("/api/time").expect(401);
+  assert.equal(response.body.error, "Unauthorized");
+});
+
 test("unknown routes return 404", async () => {
   const response = await request(app).get("/api/not-real").expect(404);
   assert.equal(response.body.error, "Not found");

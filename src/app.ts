@@ -13,6 +13,7 @@ import { authRouter } from "./routes/auth.js";
 import { bookingRouter } from "./routes/booking.js";
 import { googleRouter } from "./routes/google.js";
 import { healthRouter } from "./routes/health.js";
+import { timeRouter } from "./routes/time.js";
 import { transferRouter } from "./routes/transfer.js";
 
 export function createApp() {
@@ -43,6 +44,7 @@ export function createApp() {
   app.use("/api", apiRateLimit);
 
   app.use("/api/health", healthRouter);
+  app.use("/api/time", timeRouter);
   app.use("/api/availability", availabilityRouter);
   app.use("/api/booking", bookingRateLimit, bookingRouter);
   app.use("/api/transfer", transferRouter);
