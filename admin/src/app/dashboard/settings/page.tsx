@@ -25,7 +25,13 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
         {saved === "mapping" ? <div className="mb-5"><StatusBanner kind="success" message="Calendar mapping saved." /></div> : null}
         {saved === "disconnect" ? <div className="mb-5"><StatusBanner kind="success" message="Google Calendar disconnected." /></div> : null}
         {saved === "config-error" ? <div className="mb-5"><StatusBanner kind="warning" message="Backend admin environment variables are missing." /></div> : null}
+        {saved === "backend-url-error" ? <div className="mb-5"><StatusBanner kind="warning" message="Production backend URL is still set to localhost. Set NEXT_PUBLIC_BACKEND_URL to the deployed backend URL and redeploy." /></div> : null}
         {saved === "google-error" ? <div className="mb-5"><StatusBanner kind="warning" message="Google Calendar could not be connected. Check backend admin credentials and try again." /></div> : null}
+        {data.google.backendIssue === "localhost-backend-url" ? (
+          <div className="mb-5">
+            <StatusBanner kind="warning" message="Production backend URL is still set to localhost. Set NEXT_PUBLIC_BACKEND_URL to the deployed backend URL and redeploy." />
+          </div>
+        ) : null}
 
         <div className="grid max-w-[860px] gap-4">
           <section className="panel p-6">

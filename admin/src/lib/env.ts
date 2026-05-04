@@ -7,6 +7,37 @@ const env = {
   adminDevBypass: process.env.ADMIN_DEV_BYPASS,
 };
 
+export type BackendEnvIssue = "missing-backend-url" | "missing-admin-api-key" | "localhost-backend-url";
+
+function isProductionRuntime() {
+  return process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+}
+
+function isLocalhostUrl(value: string) {
+  try {
+    const hostname = new URL(value).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+export function getBackendEnvIssue(): BackendEnvIssue | null {
+  if (!env.backendUrl) {
+    return "missing-backend-url";
+  }
+
+  if (isProductionRuntime() && isLocalhostUrl(env.backendUrl)) {
+    return "localhost-backend-url";
+  }
+
+  if (!env.adminApiKey) {
+    return "missing-admin-api-key";
+  }
+
+  return null;
+}
+
 export function getMissingAdminEnv() {
   const entries: Array<[string, string | undefined]> = [
     ["NEXT_PUBLIC_SUPABASE_URL", env.supabaseUrl],
@@ -30,7 +61,7 @@ export function hasSupabaseServiceEnv() {
 }
 
 export function hasBackendEnv() {
-  return Boolean(env.backendUrl && env.adminApiKey);
+  return getBackendEnvIssue() === null;
 }
 
 export function isDemoMode() {

@@ -3,7 +3,7 @@ import "server-only";
 import { endOfDay, endOfWeek, formatISO, startOfDay, startOfWeek } from "date-fns";
 import { getAuthorizedAdminAccountId } from "./admin-auth";
 import { createServiceSupabaseClient } from "./supabase/server";
-import { getBackendAdminHeaders, getBackendUrl, hasBackendEnv } from "./env";
+import { getBackendAdminHeaders, getBackendEnvIssue, getBackendUrl, hasBackendEnv, type BackendEnvIssue } from "./env";
 
 export type BookingRecord = {
   id: string;
@@ -52,6 +52,7 @@ export type GoogleSettings = {
   calendarOptions: Array<{ id: string; summary: string; primary: boolean; accessRole: string | null }>;
   connectedAccountEmail: string | null;
   connectedAccountName: string | null;
+  backendIssue: BackendEnvIssue | null;
   backendUrl: string | null;
 };
 
@@ -108,6 +109,7 @@ async function fetchGoogleSettings(accountId: string | null): Promise<GoogleSett
     calendarOptions: [],
     connectedAccountEmail: null,
     connectedAccountName: null,
+    backendIssue: getBackendEnvIssue(),
     backendUrl: null,
   } satisfies GoogleSettings;
 
@@ -170,6 +172,7 @@ async function fetchGoogleSettings(accountId: string | null): Promise<GoogleSett
     calendarOptions,
     connectedAccountEmail,
     connectedAccountName: primaryCalendar?.summary ?? null,
+    backendIssue: null,
     backendUrl,
   };
 }
