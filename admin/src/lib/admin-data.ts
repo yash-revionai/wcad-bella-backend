@@ -50,6 +50,8 @@ export type GoogleSettings = {
   mainCalendarId: string | null;
   locations: Array<{ slug: string; name: string; google_calendar_id: string | null }>;
   calendarOptions: Array<{ id: string; summary: string; primary: boolean; accessRole: string | null }>;
+  connectedAccountEmail: string | null;
+  connectedAccountName: string | null;
   backendUrl: string | null;
 };
 
@@ -98,36 +100,76 @@ function normalizeBookingRow(row: RawBookingRow): BookingRecord {
 }
 
 async function fetchGoogleSettings(accountId: string | null): Promise<GoogleSettings> {
+  const disconnectedSettings = {
+    connected: false,
+    mainCalendarMapped: false,
+    mainCalendarId: null,
+    locations: [],
+    calendarOptions: [],
+    connectedAccountEmail: null,
+    connectedAccountName: null,
+    backendUrl: null,
+  } satisfies GoogleSettings;
+
   const backendHeaders = getBackendAdminHeaders();
   if (!hasBackendEnv() || !backendHeaders || !accountId) {
-    return {
-      connected: false,
-      mainCalendarMapped: false,
-      mainCalendarId: null,
-      locations: [],
-      calendarOptions: [],
-      backendUrl: null,
-    };
+    return disconnectedSettings;
   }
 
   const backendUrl = getBackendUrl()!;
   const accountQuery = new URLSearchParams({ accountId });
-  const [statusResponse, mappingResponse, calendarsResponse] = await Promise.all([
-    fetch(`${backendUrl}/api/google/status?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
-    fetch(`${backendUrl}/api/google/mapping?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
-    fetch(`${backendUrl}/api/google/calendars?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
-  ]);
+  let statusResponse: Response;
+  let mappingResponse: Response;
+
+  try {
+    [statusResponse, mappingResponse] = await Promise.all([
+      fetch(`${backendUrl}/api/google/status?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
+      fetch(`${backendUrl}/api/google/mapping?${accountQuery}`, { cache: "no-store", headers: backendHeaders }),
+    ]);
+  } catch {
+    return { ...disconnectedSettings, backendUrl };
+  }
+
+  if (!statusResponse.ok || !mappingResponse.ok) {
+    return { ...disconnectedSettings, backendUrl };
+  }
 
   const status = await statusResponse.json();
   const mapping = await mappingResponse.json();
-  const calendars = calendarsResponse.ok ? await calendarsResponse.json() : { calendars: [] };
+  let calendarOptions: GoogleSettings["calendarOptions"] = [];
+  let connected = Boolean(status.connected);
+
+  if (connected) {
+    let calendarsResponse: Response;
+
+    try {
+      calendarsResponse = await fetch(`${backendUrl}/api/google/calendars?${accountQuery}`, {
+        cache: "no-store",
+        headers: backendHeaders,
+      });
+    } catch {
+      calendarsResponse = new Response(null, { status: 503 });
+    }
+
+    if (calendarsResponse.ok) {
+      const calendars = await calendarsResponse.json();
+      calendarOptions = Array.isArray(calendars.calendars) ? calendars.calendars : [];
+    } else if (calendarsResponse.status === 409) {
+      connected = false;
+    }
+  }
+
+  const primaryCalendar = calendarOptions.find((calendar) => calendar.primary);
+  const connectedAccountEmail = primaryCalendar?.id.includes("@") ? primaryCalendar.id : null;
 
   return {
-    connected: Boolean(status.connected),
-    mainCalendarMapped: Boolean(status.mainCalendarMapped),
+    connected,
+    mainCalendarMapped: connected && Boolean(status.mainCalendarMapped),
     mainCalendarId: mapping.mainCalendarId ?? null,
     locations: Array.isArray(mapping.locations) ? mapping.locations : [],
-    calendarOptions: Array.isArray(calendars.calendars) ? calendars.calendars : [],
+    calendarOptions,
+    connectedAccountEmail,
+    connectedAccountName: primaryCalendar?.summary ?? null,
     backendUrl,
   };
 }

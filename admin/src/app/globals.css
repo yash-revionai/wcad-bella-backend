@@ -102,6 +102,7 @@ textarea {
   border-radius: 8px;
   padding: 0 16px;
   font-size: 14px;
+  cursor: pointer;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
@@ -115,6 +116,17 @@ textarea {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.02);
   color: #e7dfd4;
+}
+
+.action-button:disabled,
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.action-button[aria-busy="true"],
+.ghost-button[aria-busy="true"] {
+  cursor: wait;
 }
 
 .schedule-hours-shell {

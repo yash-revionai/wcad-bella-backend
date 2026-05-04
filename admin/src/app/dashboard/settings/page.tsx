@@ -1,6 +1,7 @@
 import { Suspense } from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, RefreshCw, Save, Unlink } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { StatusBanner } from "@/components/status-banner";
 import { getSettingsData } from "@/lib/admin-data";
 import { connectGoogleAction, disconnectGoogleAction, saveGoogleMappingAction } from "../actions";
@@ -13,6 +14,9 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
   const saved = typeof searchParams.saved === "string" ? searchParams.saved : null;
   const data = await getSettingsData();
   const mappedLocationCount = data.google.locations.filter((location) => Boolean(location.google_calendar_id)).length;
+  const connectedAccountLabel = data.google.connected
+    ? data.google.connectedAccountEmail ?? data.google.connectedAccountName ?? "Connected Google account"
+    : "No Google account connected";
 
   return (
     <div className="min-h-screen">
@@ -41,18 +45,24 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
                         ? `Connected - ${mappedLocationCount}/3 location calendars mapped`
                         : "Google Calendar disconnected"}
                     </p>
-                    <p className="text-[15px] text-[#b7ab98]">worldclassautodetail@gmail.com</p>
+                    <p className="text-[15px] text-[#b7ab98]">{connectedAccountLabel}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   {data.google.backendUrl ? (
                     <form action={connectGoogleAction}>
-                      <button type="submit" className="ghost-button text-[#f5f0e8]">Reconnect</button>
+                      <PendingSubmitButton pendingLabel="Opening..." className="ghost-button text-[#f5f0e8]">
+                        <RefreshCw className="h-4 w-4" />
+                        {data.google.connected ? "Reconnect" : "Connect"}
+                      </PendingSubmitButton>
                     </form>
                   ) : null}
                   {data.google.backendUrl ? (
                     <form action={disconnectGoogleAction}>
-                      <button type="submit" className="ghost-button text-[#f5f0e8]">Disconnect</button>
+                      <PendingSubmitButton pendingLabel="Disconnecting..." className="ghost-button text-[#f5f0e8]" disabled={!data.google.connected}>
+                        <Unlink className="h-4 w-4" />
+                        Disconnect
+                      </PendingSubmitButton>
                     </form>
                   ) : null}
                 </div>
@@ -97,7 +107,10 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
                   ))}
                 </div>
                 <div className="mt-5">
-                  <button type="submit" className="action-button">Save Mapping</button>
+                  <PendingSubmitButton pendingLabel="Saving..." className="action-button">
+                    <Save className="h-4 w-4" />
+                    Save Mapping
+                  </PendingSubmitButton>
                 </div>
               </form>
             )}

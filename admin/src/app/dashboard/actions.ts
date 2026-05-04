@@ -262,22 +262,31 @@ export async function saveGoogleMappingAction(formData: FormData) {
     redirect("/dashboard/settings?saved=config-error");
   }
 
-  await fetch(`${backendUrl}/api/google/mapping`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...backendHeaders,
-    },
-    body: JSON.stringify({
-      accountId,
-      mainCalendarId: parsed.mainCalendarId,
-      locations: {
-        pikesville: parsed.pikesvilleCalendarId,
-        towson: parsed.towsonCalendarId,
-        mobile: parsed.mobileCalendarId,
+  let response: Response;
+  try {
+    response = await fetch(`${backendUrl}/api/google/mapping`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...backendHeaders,
       },
-    }),
-  });
+      body: JSON.stringify({
+        accountId,
+        mainCalendarId: parsed.mainCalendarId,
+        locations: {
+          pikesville: parsed.pikesvilleCalendarId,
+          towson: parsed.towsonCalendarId,
+          mobile: parsed.mobileCalendarId,
+        },
+      }),
+    });
+  } catch {
+    redirect("/dashboard/settings?saved=google-error");
+  }
+
+  if (!response.ok) {
+    redirect("/dashboard/settings?saved=google-error");
+  }
 
   revalidatePath("/dashboard/settings");
   redirect("/dashboard/settings?saved=mapping");
@@ -295,10 +304,15 @@ export async function connectGoogleAction() {
     redirect("/dashboard/settings?saved=config-error");
   }
 
-  const response = await fetch(`${backendUrl}/api/auth/google/url?accountId=${encodeURIComponent(accountId)}`, {
-    cache: "no-store",
-    headers: backendHeaders,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${backendUrl}/api/auth/google/url?accountId=${encodeURIComponent(accountId)}`, {
+      cache: "no-store",
+      headers: backendHeaders,
+    });
+  } catch {
+    redirect("/dashboard/settings?saved=google-error");
+  }
 
   if (!response.ok) {
     redirect("/dashboard/settings?saved=google-error");
@@ -324,10 +338,19 @@ export async function disconnectGoogleAction() {
     redirect("/dashboard/settings?saved=config-error");
   }
 
-  await fetch(`${backendUrl}/api/google/connection?accountId=${encodeURIComponent(accountId)}`, {
-    method: "DELETE",
-    headers: backendHeaders,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${backendUrl}/api/google/connection?accountId=${encodeURIComponent(accountId)}`, {
+      method: "DELETE",
+      headers: backendHeaders,
+    });
+  } catch {
+    redirect("/dashboard/settings?saved=google-error");
+  }
+
+  if (!response.ok) {
+    redirect("/dashboard/settings?saved=google-error");
+  }
 
   revalidatePath("/dashboard/settings");
   redirect("/dashboard/settings?saved=disconnect");
