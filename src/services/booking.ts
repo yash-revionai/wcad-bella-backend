@@ -128,6 +128,18 @@ function isUniqueConstraintError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }
 
+function isMissingIdempotencyColumnError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "42703" &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.includes("idempotency_key")
+  );
+}
+
 async function findExistingBookingByIdempotencyKey(
   supabase: ReturnType<typeof createServiceSupabaseClient>,
   accountId: string,
@@ -141,6 +153,11 @@ async function findExistingBookingByIdempotencyKey(
     .maybeSingle();
 
   if (error) {
+    if (isMissingIdempotencyColumnError(error)) {
+      logger.warn("Booking idempotency column is missing; continuing without replay protection");
+      return null;
+    }
+
     throw new Error(error.message);
   }
 
@@ -391,26 +408,37 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
     let bookingId: string;
 
     try {
-      const { data: booking, error: bookingError } = await supabase
+      const bookingPayload = {
+        account_id: config.account.id,
+        location_id: config.location.id,
+        service_id: config.service.id,
+        vehicle_type: request.vehicleType,
+        customer_name: request.callerName,
+        customer_phone: normalizedPhone,
+        customer_email: request.callerEmail ?? null,
+        appointment_start: appointmentStartUtc,
+        appointment_end: appointmentEnd.toUTC().toISO({ suppressMilliseconds: true }),
+        duration_minutes: config.durationMinutes,
+        google_event_id: calendarEvent.id,
+        notes: request.notes ?? null,
+        price_cents: config.priceCents
+      };
+
+      let { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .insert({
-          account_id: config.account.id,
-          location_id: config.location.id,
-          service_id: config.service.id,
-          vehicle_type: request.vehicleType,
-          customer_name: request.callerName,
-          customer_phone: normalizedPhone,
-          customer_email: request.callerEmail ?? null,
-          appointment_start: appointmentStartUtc,
-          appointment_end: appointmentEnd.toUTC().toISO({ suppressMilliseconds: true }),
-          duration_minutes: config.durationMinutes,
-          google_event_id: calendarEvent.id,
-          notes: request.notes ?? null,
-          price_cents: config.priceCents,
+          ...bookingPayload,
           idempotency_key: idempotencyKey
         })
         .select("id")
         .single();
+
+      if (isMissingIdempotencyColumnError(bookingError)) {
+        logger.warn("Booking idempotency column is missing; saving booking without idempotency key");
+        const fallbackInsert = await supabase.from("bookings").insert(bookingPayload).select("id").single();
+        booking = fallbackInsert.data;
+        bookingError = fallbackInsert.error;
+      }
 
       if (bookingError || !booking) {
         if (isUniqueConstraintError(bookingError)) {
