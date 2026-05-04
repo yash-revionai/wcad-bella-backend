@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { StatusBanner } from "@/components/status-banner";
 import { getSettingsData } from "@/lib/admin-data";
-import { connectGoogleAction, disconnectGoogleAction, saveGoogleMappingAction } from "../actions";
+import { disconnectGoogleAction, saveGoogleMappingAction } from "../actions";
 import { SettingsSkeleton } from "@/components/skeletons/settings-skeleton";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -50,12 +50,10 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
                 </div>
                 <div className="flex items-center gap-3">
                   {data.google.backendUrl ? (
-                    <form action={connectGoogleAction}>
-                      <PendingSubmitButton pendingLabel="Opening..." className="ghost-button text-[#f5f0e8]">
-                        <RefreshCw className="h-4 w-4" />
-                        {data.google.connected ? "Reconnect" : "Connect"}
-                      </PendingSubmitButton>
-                    </form>
+                    <a className="ghost-button text-[#f5f0e8]" href="/dashboard/settings/google/connect">
+                      <RefreshCw className="h-4 w-4" />
+                      {data.google.connected ? "Reconnect" : "Connect"}
+                    </a>
                   ) : null}
                   {data.google.backendUrl ? (
                     <form action={disconnectGoogleAction}>
