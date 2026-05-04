@@ -230,12 +230,19 @@ test("POST /api/booking rejects invalid callerPhone values", async () => {
     })
     .expect(200);
 
-  assert.match(response.body.result, /valid details/);
+  assert.match(response.body.result, /full ten-digit callback phone number/);
 });
 
 test("phone normalization converts local US numbers to E.164", () => {
   assert.equal(normalizeUsPhoneNumber("(443) 555-1234"), "+14435551234");
   assert.equal(normalizeUsPhoneNumber("1-443-555-1234"), "+14435551234");
+  assert.equal(normalizeUsPhoneNumber("416-721-8008"), "+14167218008");
+});
+
+test("phone normalization rejects incomplete or malformed NANP numbers", () => {
+  assert.throws(() => normalizeUsPhoneNumber("416-718-008"), /valid 10-digit/);
+  assert.throws(() => normalizeUsPhoneNumber("+1416718008"), /valid 10-digit/);
+  assert.throws(() => normalizeUsPhoneNumber("1416718008"), /valid 10-digit/);
 });
 
 test("slot generation respects capacity for overlapping appointments", () => {

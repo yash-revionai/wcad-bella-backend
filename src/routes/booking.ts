@@ -46,6 +46,26 @@ bookingRouter.post("/", validateApiKey, async (req, res, next) => {
     res.json(response);
   } catch (error) {
     if (error instanceof Error && error.name === "ZodError") {
+      const issues = "issues" in error && Array.isArray(error.issues) ? error.issues : [];
+      const hasPhoneIssue = issues.some((issue) => {
+        return (
+          typeof issue === "object" &&
+          issue !== null &&
+          "path" in issue &&
+          Array.isArray(issue.path) &&
+          issue.path.includes("callerPhone")
+        );
+      });
+
+      if (hasPhoneIssue) {
+        res.json({
+          result:
+            "I need the full ten-digit callback phone number before I can book that appointment. Please ask the caller to repeat the number digit by digit, then read it back in three groups to confirm.",
+          agentReaction: "speaks-once"
+        });
+        return;
+      }
+
       res.json({
         result:
           "I did not get enough valid details to confirm the booking. Could I confirm the caller's name, phone number, service, vehicle type, location, and appointment time?",
