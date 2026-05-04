@@ -239,10 +239,10 @@ test("phone normalization converts local US numbers to E.164", () => {
 });
 
 test("slot generation respects capacity for overlapping appointments", () => {
-  const date = DateTime.fromISO("2026-04-29", { zone: "America/New_York" });
+  const date = DateTime.fromISO("2026-04-29", { zone: "Asia/Kolkata" });
   const busyRange = {
-    start: DateTime.fromISO("2026-04-29T09:00:00", { zone: "America/New_York" }),
-    end: DateTime.fromISO("2026-04-29T12:00:00", { zone: "America/New_York" })
+    start: DateTime.fromISO("2026-04-29T09:00:00", { zone: "Asia/Kolkata" }),
+    end: DateTime.fromISO("2026-04-29T12:00:00", { zone: "Asia/Kolkata" })
   };
 
   const oneExistingJob = generateSlotsForDay({
@@ -253,7 +253,7 @@ test("slot generation respects capacity for overlapping appointments", () => {
     bufferMinutes: 15,
     capacity: 2,
     busyRanges: [busyRange],
-    now: DateTime.fromISO("2026-04-28T10:00:00", { zone: "America/New_York" })
+    now: DateTime.fromISO("2026-04-28T10:00:00", { zone: "Asia/Kolkata" })
   });
 
   const twoExistingJobs = generateSlotsForDay({
@@ -264,7 +264,7 @@ test("slot generation respects capacity for overlapping appointments", () => {
     bufferMinutes: 15,
     capacity: 2,
     busyRanges: [busyRange, busyRange],
-    now: DateTime.fromISO("2026-04-28T10:00:00", { zone: "America/New_York" })
+    now: DateTime.fromISO("2026-04-28T10:00:00", { zone: "Asia/Kolkata" })
   });
 
   assert.equal(oneExistingJob[0]?.toFormat("HH:mm"), "09:00");
@@ -273,7 +273,7 @@ test("slot generation respects capacity for overlapping appointments", () => {
 
 test("slot generation respects same-day cutoff", () => {
   const slots = generateSlotsForDay({
-    date: DateTime.fromISO("2026-04-29", { zone: "America/New_York" }),
+    date: DateTime.fromISO("2026-04-29", { zone: "Asia/Kolkata" }),
     openTime: "09:00",
     closeTime: "17:00",
     durationMinutes: 90,
@@ -281,7 +281,7 @@ test("slot generation respects same-day cutoff", () => {
     capacity: 2,
     busyRanges: [],
     sameDayCutoffTime: "14:00",
-    now: DateTime.fromISO("2026-04-29T14:01:00", { zone: "America/New_York" })
+    now: DateTime.fromISO("2026-04-29T14:01:00", { zone: "Asia/Kolkata" })
   });
 
   assert.equal(slots.length, 0);
@@ -295,12 +295,12 @@ test("Google events convert to busy ranges in business timezone", () => {
         end: { dateTime: "2026-04-29T15:00:00Z" }
       }
     ],
-    DateTime.fromISO("2026-04-29", { zone: "America/New_York" })
+    DateTime.fromISO("2026-04-29", { zone: "Asia/Kolkata" })
   );
 
   assert.equal(ranges.length, 1);
-  assert.equal(ranges[0]?.start.toFormat("HH:mm"), "09:00");
-  assert.equal(ranges[0]?.end.toFormat("HH:mm"), "11:00");
+  assert.equal(ranges[0]?.start.toFormat("HH:mm"), "18:30");
+  assert.equal(ranges[0]?.end.toFormat("HH:mm"), "20:30");
 });
 
 test("availability degrades gracefully when Google Calendar is unavailable", async () => {
@@ -412,7 +412,7 @@ test("booking degrades gracefully when Google Calendar write fails", async () =>
         durationMinutes: 120,
         priceCents: 24900
       }),
-      assertSlotStillAvailable: async () => DateTime.fromISO("2026-04-29T12:00:00", { zone: "America/New_York" }),
+      assertSlotStillAvailable: async () => DateTime.fromISO("2026-04-29T12:00:00", { zone: "Asia/Kolkata" }),
       createCalendarEvent: async () => {
         throw new AppError("Google Calendar is temporarily unavailable.", 503, "google_calendar_unavailable");
       },

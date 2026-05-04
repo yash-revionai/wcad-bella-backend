@@ -6,7 +6,7 @@ import { resolveAccount } from "./accounts.js";
 import { fetchCalendarEvents } from "./calendar.js";
 import type { LocationSlug, ServiceSlug, VehicleType } from "../config/constants.js";
 
-const businessZone = "America/New_York";
+const businessZone = "Asia/Kolkata";
 const slotStepMinutes = 30;
 const searchDays = 14;
 const configCacheTtlMs = 10_000;
