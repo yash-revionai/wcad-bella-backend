@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getDashboardData } from "@/lib/admin-data";
 import { formatVehicleLabel } from "@/lib/format";
+import { formatTimeInBusinessZone } from "@/lib/timezone";
 import { DashboardSkeleton } from "@/components/skeletons/dashboard-skeleton";
 
 function formatMoney(cents: number) {
@@ -90,7 +91,7 @@ async function DashboardContent() {
                 className="grid grid-cols-[160px_1.5fr_1fr] items-center border-b border-[rgba(255,255,255,0.06)] px-5 py-6 last:border-b-0"
               >
                 <span className="font-mono text-[28px] tracking-[0.16em] text-[#d8b960]">
-                  {new Date(booking.appointment_start).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                  {formatTimeInBusinessZone(booking.appointment_start)}
                 </span>
                 <div className="flex items-center gap-6">
                   <span className="max-w-[150px] text-[16px] font-semibold leading-7 text-[#f5f0e8]">{booking.customer_name}</span>

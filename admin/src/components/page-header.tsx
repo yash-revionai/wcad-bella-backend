@@ -1,11 +1,11 @@
-import { format } from "date-fns";
+import { formatCurrentDateLabelInBusinessZone } from "@/lib/timezone";
 
 type PageHeaderProps = {
   title: string;
 };
 
 export function PageHeader({ title }: PageHeaderProps) {
-  const dateLabel = format(new Date(), "EEE dd MMM yyyy").toUpperCase();
+  const dateLabel = formatCurrentDateLabelInBusinessZone();
 
   return (
     <header className="flex items-center justify-between border-b border-[rgba(255,255,255,0.06)] px-8 py-7">

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getScheduleData } from "@/lib/admin-data";
+import { formatMonthDayInBusinessZone } from "@/lib/timezone";
 import { createOverrideAction, deleteOverrideAction, updateLocationSettingsAction } from "../actions";
 import { ScheduleSkeleton } from "@/components/skeletons/schedule-skeleton";
 
@@ -58,7 +59,7 @@ async function ScheduleContent(props: { searchParams: Promise<Record<string, str
                 <div className="grid gap-2">
                   {activeBlocks.map((block) => (
                     <div key={`${block.locationName}-${block.override_date}`} className="rounded-[6px] bg-[#26252d] px-4 py-3 text-[14px] text-[#beb29f]">
-                      <span className="mr-5 font-mono text-[#d8b960]">{new Date(block.override_date).toLocaleDateString("en-US", { month: "short", day: "2-digit" }).toUpperCase()}</span>
+                      <span className="mr-5 font-mono text-[#d8b960]">{formatMonthDayInBusinessZone(block.override_date)}</span>
                       <span className="mr-4">{block.locationName}</span>
                       <span className="italic text-[#8d8578]">{block.reason ?? "Blocked"}</span>
                       <form action={deleteOverrideAction} className="float-right">

@@ -1,9 +1,9 @@
 import "server-only";
 
-import { endOfDay, endOfWeek, formatISO, startOfDay, startOfWeek } from "date-fns";
 import { getAuthorizedAdminAccountId } from "./admin-auth";
 import { createServiceSupabaseClient } from "./supabase/server";
 import { getBackendAdminHeaders, getBackendEnvIssue, getBackendUrl, hasBackendEnv, type BackendEnvIssue } from "./env";
+import { businessDateOnly, businessDayRangeIso, businessWeekRangeIso } from "./timezone";
 
 export type BookingRecord = {
   id: string;
@@ -180,31 +180,29 @@ async function fetchGoogleSettings(accountId: string | null): Promise<GoogleSett
 export async function getDashboardData() {
   const accountId = await getAuthorizedAdminAccountId();
   const supabase = createServiceSupabaseClient();
-  const now = new Date();
-  const dayStart = formatISO(startOfDay(now));
-  const dayEnd = formatISO(endOfDay(now));
-  const weekEnd = formatISO(endOfWeek(now, { weekStartsOn: 1 }));
+  const dayRange = businessDayRangeIso();
+  const weekRange = businessWeekRangeIso();
 
   const [{ data: todayBookings }, { count: bookingsTodayCount }, { data: weekBookings, count: bookingsWeekCount }, google] = await Promise.all([
     supabase
       .from("bookings")
       .select("id,customer_name,customer_phone,customer_email,appointment_start,appointment_end,vehicle_type,notes,price_cents,status,services(name),locations(name,slug,address)")
       .eq("account_id", accountId)
-      .gte("appointment_start", dayStart)
-      .lte("appointment_start", dayEnd)
+      .gte("appointment_start", dayRange.start)
+      .lte("appointment_start", dayRange.end)
       .order("appointment_start"),
     supabase
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .eq("account_id", accountId)
-      .gte("appointment_start", dayStart)
-      .lte("appointment_start", dayEnd),
+      .gte("appointment_start", dayRange.start)
+      .lte("appointment_start", dayRange.end),
     supabase
       .from("bookings")
       .select("id,price_cents", { count: "exact" })
       .eq("account_id", accountId)
-      .gte("appointment_start", formatISO(startOfWeek(now, { weekStartsOn: 1 })))
-      .lte("appointment_start", weekEnd),
+      .gte("appointment_start", weekRange.start)
+      .lte("appointment_start", weekRange.end),
     fetchGoogleSettings(accountId),
   ]);
   const revenueThisWeekCents = (weekBookings ?? []).reduce((sum, booking) => sum + (booking.price_cents ?? 0), 0);
@@ -235,7 +233,7 @@ export async function getBookingsData() {
     .from("bookings")
     .select("id,customer_name,customer_phone,customer_email,appointment_start,appointment_end,vehicle_type,notes,price_cents,status,services(name),locations(name,slug,address)")
     .eq("account_id", accountId)
-    .gte("appointment_start", formatISO(startOfDay(new Date())))
+    .gte("appointment_start", businessDayRangeIso().start)
     .order("appointment_start");
 
   return {
@@ -264,7 +262,7 @@ export async function getScheduleData() {
       .from("location_overrides")
       .select("location_id,override_date,is_closed,open_time,close_time,reason")
       .in("location_id", locationIds)
-      .gte("override_date", new Date().toISOString().slice(0, 10))
+      .gte("override_date", businessDateOnly())
       .order("override_date"),
   ]);
 

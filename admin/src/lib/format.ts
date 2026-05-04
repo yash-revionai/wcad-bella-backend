@@ -1,17 +1,29 @@
-import { format, isToday, parseISO } from "date-fns";
+import { businessTimeZone, formatTimeInBusinessZone, isTodayInBusinessZone } from "./timezone";
 
 export function formatAppointment(value: string) {
-  const date = parseISO(value);
-  return format(date, "EEE, MMM d • h:mm a");
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: businessTimeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+
+  return formatted.replace(/, ([^,]+)$/, " • $1");
 }
 
 export function formatTimeRange(start: string, end: string) {
-  return `${format(parseISO(start), "h:mm a")} to ${format(parseISO(end), "h:mm a")}`;
+  return `${formatTimeInBusinessZone(start)} to ${formatTimeInBusinessZone(end)}`;
 }
 
 export function formatDashboardDate(value: string) {
-  const date = parseISO(value);
-  return isToday(date) ? `Today • ${format(date, "h:mm a")}` : format(date, "EEE • h:mm a");
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: businessTimeZone,
+    weekday: "short",
+  }).format(new Date(value));
+
+  return isTodayInBusinessZone(value) ? `Today • ${formatTimeInBusinessZone(value)}` : `${weekday} • ${formatTimeInBusinessZone(value)}`;
 }
 
 export function formatCurrencyFromCents(cents: number | null) {

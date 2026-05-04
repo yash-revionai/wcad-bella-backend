@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getBookingsData } from "@/lib/admin-data";
+import { formatTimeInBusinessZone, formatWeekdayTimeInBusinessZone, isTodayInBusinessZone } from "@/lib/timezone";
 import { updateBookingStatusAction } from "../actions";
 import { BookingsSkeleton } from "@/components/skeletons/bookings-skeleton";
 
@@ -55,11 +56,9 @@ async function BookingsContent(props: { searchParams: Promise<Record<string, str
           </div>
 
           {bookings.map((booking) => {
-            const start = new Date(booking.appointment_start);
-            const isToday = new Date().toDateString() === start.toDateString();
-            const timeLabel = isToday
-              ? start.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-              : `${start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()} — ${start.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+            const timeLabel = isTodayInBusinessZone(booking.appointment_start)
+              ? formatTimeInBusinessZone(booking.appointment_start)
+              : formatWeekdayTimeInBusinessZone(booking.appointment_start);
 
             return (
               <details key={booking.id} className="border-b border-[rgba(255,255,255,0.06)] last:border-b-0">
