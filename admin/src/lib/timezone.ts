@@ -1,6 +1,6 @@
-export const businessTimeZone = "Asia/Kolkata";
+export const businessTimeZone = "America/New_York";
 
-const businessOffset = "+05:30";
+const businessOffset = "-04:00";
 
 function partsForDate(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {

@@ -5,7 +5,7 @@ import { formatPhoneForDisplay } from "../lib/phone.js";
 
 const businessPhoneDisplay = "(443) 957-4789";
 const businessPhoneSms = "443-957-4789";
-const businessZone = "Asia/Kolkata";
+const businessZone = "America/New_York";
 const notificationTimeoutMs = 5_000;
 
 export type ConfirmationDetails = {

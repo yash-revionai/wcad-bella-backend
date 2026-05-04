@@ -260,11 +260,11 @@ export async function createCalendarEvent(input: {
           description: input.description ?? null,
           start: {
             dateTime: input.startIso,
-            timeZone: "Asia/Kolkata"
+            timeZone: "America/New_York"
           },
           end: {
             dateTime: input.endIso,
-            timeZone: "Asia/Kolkata"
+            timeZone: "America/New_York"
           }
         }
       },

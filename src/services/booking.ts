@@ -11,7 +11,7 @@ import { createCalendarEvent, deleteCalendarEvent, fetchCalendarEvents } from ".
 import { generateSlotsForDay, googleEventsToBusyRanges } from "./availability.js";
 import { sendEmailConfirmation, sendSmsConfirmation } from "./notifications.js";
 
-const businessZone = "Asia/Kolkata";
+const businessZone = "America/New_York";
 
 export type BookingRequest = {
   callerName: string;

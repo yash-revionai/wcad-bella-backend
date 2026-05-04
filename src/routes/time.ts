@@ -4,7 +4,7 @@ import { validateApiKey } from "../middleware/auth.js";
 
 export const timeRouter = Router();
 
-const businessZone = "Asia/Kolkata";
+const businessZone = "America/New_York";
 const mobileSameDayCutoffTime = "14:00";
 
 function applyTime(date: DateTime, time: string) {
