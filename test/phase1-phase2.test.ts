@@ -130,6 +130,38 @@ test("POST /api/booking requires Bella API key", async () => {
   assert.equal(response.body.error, "Unauthorized");
 });
 
+test("POST /api/callback-request requires Bella API key", async () => {
+  const response = await request(app)
+    .post("/api/callback-request")
+    .send({
+      callerName: "John Smith",
+      callerPhone: "4435551234",
+      reason: "Needs a callback",
+      category: "general_callback"
+    })
+    .expect(401);
+
+  assert.equal(response.body.error, "Unauthorized");
+});
+
+test("POST /api/callback-request rejects invalid callback details gracefully", async () => {
+  const response = await request(app)
+    .post("/api/callback-request")
+    .set("x-api-key", bellaApiKey)
+    .send({
+      callerName: "John Smith",
+      callerPhone: "4435551234",
+      reason: "Needs a callback",
+      category: "not_real"
+    })
+    .expect(200);
+
+  assert.equal(response.body.saved, false);
+  assert.match(response.body.result, /valid callback details/);
+  assert.equal(response.body.agentReaction, "speaks");
+  assert.equal(response.headers["x-ultravox-agent-reaction"], "speaks");
+});
+
 test("POST /api/availability rejects invalid preferredDate values", async () => {
   const response = await request(app)
     .post("/api/availability")

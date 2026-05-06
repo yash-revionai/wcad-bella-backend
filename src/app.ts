@@ -11,6 +11,7 @@ import { apiRateLimit, bookingRateLimit } from "./middleware/rateLimit.js";
 import { availabilityRouter } from "./routes/availability.js";
 import { authRouter } from "./routes/auth.js";
 import { bookingRouter } from "./routes/booking.js";
+import { callbackRequestRouter } from "./routes/callbackRequest.js";
 import { googleRouter } from "./routes/google.js";
 import { healthRouter } from "./routes/health.js";
 import { timeRouter } from "./routes/time.js";
@@ -47,6 +48,7 @@ export function createApp() {
   app.use("/api/time", timeRouter);
   app.use("/api/availability", availabilityRouter);
   app.use("/api/booking", bookingRateLimit, bookingRouter);
+  app.use("/api/callback-request", callbackRequestRouter);
   app.use("/api/transfer", transferRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/google", validateAdminApiKey, googleRouter);
