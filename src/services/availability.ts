@@ -416,14 +416,14 @@ export async function checkAvailability(
     return {
       result: buildAvailabilityMessage(service.name, location.name, slots),
       slots: slots.map((slot) => slot.toISO({ suppressMilliseconds: true })),
-      agentReaction: "speaks-once"
+      agentReaction: "speaks"
     };
   } catch (error) {
     if (error instanceof AppError && error.statusCode === 200) {
       return {
         result: error.message,
         slots: [],
-        agentReaction: "speaks-once"
+        agentReaction: "speaks"
       };
     }
 
@@ -432,7 +432,7 @@ export async function checkAvailability(
         result:
           "I'm having trouble checking live calendar availability right now. Could I take your name and number and have a team member call you back?",
         slots: [],
-        agentReaction: "speaks-once"
+        agentReaction: "speaks"
       };
     }
 

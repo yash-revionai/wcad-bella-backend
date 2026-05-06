@@ -170,7 +170,7 @@ function bookingConfirmedResponse(bookingId: string, hasCustomerEmail = false) {
   return {
     result: `The appointment is confirmed. Let the caller know their booking is set, they will receive a confirmation ${confirmationChannelText}, and that a credit card is needed to hold the appointment but there is no charge until after the service is complete.`,
     bookingId,
-    agentReaction: "speaks-once"
+    agentReaction: "speaks"
   };
 }
 
@@ -576,7 +576,7 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
     if (error instanceof AppError && error.statusCode === 200) {
       return {
         result: error.message,
-        agentReaction: "speaks-once"
+        agentReaction: "speaks"
       };
     }
 
@@ -584,7 +584,7 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
       return {
         result:
           "I was unable to confirm that booking in the calendar right now. Could I take your details and have a team member confirm it with you?",
-        agentReaction: "speaks-once"
+        agentReaction: "speaks"
       };
     }
 
@@ -592,7 +592,7 @@ export async function confirmBookingWithDependencies(request: BookingRequest, de
     return {
       result:
         "I was unable to save your booking right now. Could I take your details and have a team member confirm this with you?",
-      agentReaction: "speaks-once"
+      agentReaction: "speaks"
     };
   }
 }

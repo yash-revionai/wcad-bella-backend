@@ -19,6 +19,8 @@ const availabilityRequestSchema = z.object({
 }).strict();
 
 availabilityRouter.post("/", validateApiKey, async (req, res, next) => {
+  res.set("X-Ultravox-Agent-Reaction", "speaks");
+
   try {
     const parsed = availabilityRequestSchema.parse(req.body);
     const response = await checkAvailability(parsed);
@@ -29,7 +31,7 @@ availabilityRouter.post("/", validateApiKey, async (req, res, next) => {
         result:
           "I did not get enough valid appointment details to check availability. Could I confirm the service, vehicle type, location, and date?",
         slots: [],
-        agentReaction: "speaks-once"
+        agentReaction: "speaks"
       });
       return;
     }
@@ -39,7 +41,7 @@ availabilityRouter.post("/", validateApiKey, async (req, res, next) => {
       result:
         "I'm having trouble checking availability right now. Could I take your name and number and have a team member call you back?",
       slots: [],
-      agentReaction: "speaks-once"
+      agentReaction: "speaks"
     });
   }
 });
