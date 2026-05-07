@@ -1,4 +1,5 @@
 node_modules/
+.next/
 dist/
 .env
 .env.*
@@ -7,4 +8,3 @@ npm-debug.log*
 coverage/
 .DS_Store
 .railway/
-
