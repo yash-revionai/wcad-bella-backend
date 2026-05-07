@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "build:vercel": "cd admin && npm run build && cd .. && rm -rf .next && cp -R admin/.next .next",
+    "build:vercel": "cd admin && npm run build && cd .. && rm -rf .next 2>/dev/null; cp -R admin/.next .next",
     "start": "node dist/src/index.js",
     "typecheck": "tsc --noEmit",
     "test": "ADMIN_API_KEY=test-admin-api-key node --test dist/test/**/*.test.js",
