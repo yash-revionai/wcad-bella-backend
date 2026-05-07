@@ -96,7 +96,35 @@ export function requireSupabaseServiceEnv() {
 }
 
 export function getBackendUrl() {
-  return env.backendUrl ?? null;
+  if (!env.backendUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(env.backendUrl);
+    url.pathname = url.pathname.replace(/\/+$/, "");
+
+    if (url.pathname === "/api") {
+      url.pathname = "";
+    }
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return env.backendUrl.replace(/\/+$/, "");
+  }
+}
+
+export function getBackendOriginLabel() {
+  const backendUrl = getBackendUrl();
+  if (!backendUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(backendUrl).origin;
+  } catch {
+    return backendUrl;
+  }
 }
 
 export function getBackendAdminHeaders() {

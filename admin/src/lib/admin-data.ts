@@ -2,7 +2,14 @@ import "server-only";
 
 import { getAuthorizedAdminAccountId } from "./admin-auth";
 import { createServiceSupabaseClient } from "./supabase/server";
-import { getBackendAdminHeaders, getBackendEnvIssue, getBackendUrl, hasBackendEnv, type BackendEnvIssue } from "./env";
+import {
+  getBackendAdminHeaders,
+  getBackendEnvIssue,
+  getBackendOriginLabel,
+  getBackendUrl,
+  hasBackendEnv,
+  type BackendEnvIssue,
+} from "./env";
 import { businessDateOnly, businessDayRangeIso, businessWeekRangeIso } from "./timezone";
 
 export type BookingRecord = {
@@ -359,6 +366,7 @@ export async function getCallLogsData(params?: { cursor?: string; pageSize?: num
   }
 
   const backendUrl = getBackendUrl()!;
+  const backendOrigin = getBackendOriginLabel() ?? "configured backend";
   const query = new URLSearchParams({ accountId });
   if (params?.cursor) query.set("cursor", params.cursor);
   if (params?.pageSize) query.set("pageSize", String(params.pageSize));
@@ -377,7 +385,7 @@ export async function getCallLogsData(params?: { cursor?: string; pageSize?: num
         calls: [],
         total: 0,
         next: null,
-        error: `Backend returned ${response.status}`,
+        error: `Backend returned ${response.status} for /api/admin/call-logs at ${backendOrigin}`,
       };
     }
 

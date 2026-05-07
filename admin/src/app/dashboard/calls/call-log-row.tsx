@@ -29,9 +29,7 @@ export function CallLogRow({ call }: { call: CallLogEntry }) {
     }
     setLoadingRecording(true);
     try {
-      const response = await fetch(`/api/admin/call-logs/${call.callId}/recording`, {
-        headers: { "x-admin-api-key": process.env.NEXT_PUBLIC_ADMIN_API_KEY || "" },
-      });
+      const response = await fetch(`/api/admin/call-logs/${call.callId}/recording`);
       if (response.ok) {
         const data = await response.json();
         setRecordingUrl(data.url);
