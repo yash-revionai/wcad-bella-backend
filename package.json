@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "build:vercel": "if [ -d admin ]; then cd admin && npm run build && cp .next/routes-manifest.json .next/routes-manifest-deterministic.json && cd .. && rm -rf .next && cp -R admin/.next .next; else npm run build && cp .next/routes-manifest.json .next/routes-manifest-deterministic.json || true; fi",
     "start": "node dist/src/index.js",
     "typecheck": "tsc --noEmit",
     "test": "ADMIN_API_KEY=test-admin-api-key node --test dist/test/**/*.test.js",

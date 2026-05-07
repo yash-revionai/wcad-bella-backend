@@ -1,6 +1,5 @@
 {
   "framework": "nextjs",
-  "installCommand": "if [ -d admin ]; then cd admin && npm install; else npm install; fi",
-  "buildCommand": "bash build.sh",
+  "buildCommand": "npm run build:vercel",
   "outputDirectory": ".next"
 }
