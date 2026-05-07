@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "if [ -d admin ]; then cd admin; fi; npm install",
-  "buildCommand": "if [ -d admin ]; then cd admin && npm run build && cp .next/routes-manifest.json .next/routes-manifest-deterministic.json && cd .. && rm -rf .next && cp -R admin/.next .next; else npm run build && cp .next/routes-manifest.json .next/routes-manifest-deterministic.json; fi",
+  "installCommand": "if [ -d admin ]; then cd admin && npm install; else npm install; fi",
+  "buildCommand": "bash build.sh",
   "outputDirectory": ".next"
 }
