@@ -1,4 +1,5 @@
 {
-  "buildCommand": "npm install && cd admin && npm install && cd .. && npm run build:vercel",
+  "installCommand": "npm ci && cd admin && npm ci && cd ..",
+  "buildCommand": "npm run build:vercel",
   "outputDirectory": ".next"
 }
