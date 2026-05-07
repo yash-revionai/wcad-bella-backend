@@ -26,10 +26,10 @@ async function UserDashboardContent({ accountId }: { accountId: string }) {
         <PageHeader title={data.mode === 'live' ? 'Account Dashboard' : 'Dashboard'} />
 
         <div className="grid gap-6">
-          {/* Today's stats */}
+          {/* Today stats */}
           <div className="grid grid-cols-4 gap-4">
             <div className="panel p-4">
-              <p className="text-[#857c6e] text-[13px]">Today's Bookings</p>
+              <p className="text-[#857c6e] text-[13px]">Today&apos;s Bookings</p>
               <p className="font-semibold text-[20px] text-[#f5f0e8]">{data.bookingsTodayCount}</p>
             </div>
             <div className="panel p-4">
@@ -49,7 +49,7 @@ async function UserDashboardContent({ accountId }: { accountId: string }) {
           {/* Bookings preview */}
           <div className="panel">
             <div className="px-5 py-4 border-b border-[rgba(255,255,255,0.06)]">
-              <h2 className="font-semibold text-[#f5f0e8]">Today's Bookings</h2>
+              <h2 className="font-semibold text-[#f5f0e8]">Today&apos;s Bookings</h2>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               {data.todayBookings.length > 0 ? (

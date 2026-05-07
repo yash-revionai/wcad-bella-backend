@@ -3,11 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 import { createSession, setSessionCookie } from "@/lib/session";
 
-const loginSchema = {
-  email: "string",
-  password: "string",
-};
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
