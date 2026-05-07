@@ -1,44 +1,53 @@
 "use client";
 
-import { CalendarDays, Clock3, LayoutGrid, MapPin, Settings2 } from "lucide-react";
+import { CalendarDays, Clock3, LayoutGrid, MapPin, PhoneCall, Settings2, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const sections = [
-  {
-    label: "Overview",
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-      { href: "/dashboard/bookings", label: "Bookings", icon: CalendarDays },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { href: "/dashboard/schedule", label: "Schedule", icon: Clock3 },
-      { href: "/dashboard/locations", label: "Locations", icon: MapPin },
-    ],
-  },
-  {
-    label: "System",
-    items: [{ href: "/dashboard/settings", label: "Settings", icon: Settings2 }],
-  },
-];
+function getSections(isSuperAdmin: boolean) {
+  const overviewItems = [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarDays },
+    { href: "/dashboard/calls", label: "Calls", icon: PhoneCall },
+  ];
 
-export function SidebarNav() {
+  if (isSuperAdmin) {
+    overviewItems.push({ href: "/dashboard/users", label: "Users", icon: Users });
+  }
+
+  return [
+    { label: "Overview", items: overviewItems },
+    {
+      label: "Operations",
+      items: [
+        { href: "/dashboard/schedule", label: "Schedule", icon: Clock3 },
+        { href: "/dashboard/locations", label: "Locations", icon: MapPin },
+      ],
+    },
+    {
+      label: "System",
+      items: [{ href: "/dashboard/settings", label: "Settings", icon: Settings2 }],
+    },
+  ];
+}
+
+export function SidebarNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const pathname = usePathname();
+  const sections = getSections(isSuperAdmin);
 
   return (
     <>
       <nav className="hidden min-h-screen w-[220px] shrink-0 flex-col border-r border-[rgba(255,255,255,0.06)] bg-[#121216] lg:flex">
         <div className="px-8 py-9">
           <p className="font-serif text-[24px] font-semibold text-[#d5b655]">Bella Admin</p>
-          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.28em] text-[#9a9382]">Operations</p>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.28em] text-[#9a9382]">{isSuperAdmin ? "System" : "Operations"}</p>
         </div>
-        <div className="border-t border-[rgba(255,255,255,0.06)] px-8 py-5">
-          <p className="text-[13px] text-[#9d968a]">Client</p>
-          <p className="mt-2 text-[14px] font-medium text-[#f5f0e8]">World Class Auto Detail</p>
-        </div>
+        {!isSuperAdmin && (
+          <div className="border-t border-[rgba(255,255,255,0.06)] px-8 py-5">
+            <p className="text-[13px] text-[#9d968a]">Client</p>
+            <p className="mt-2 text-[14px] font-medium text-[#f5f0e8]">World Class Auto Detail</p>
+          </div>
+        )}
         <div className="border-t border-[rgba(255,255,255,0.06)] px-4 py-6">
           <div className="grid gap-7">
             {sections.map((section) => (
@@ -76,7 +85,7 @@ export function SidebarNav() {
       </nav>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[rgba(255,255,255,0.06)] bg-[#111115] px-2 py-2 backdrop-blur lg:hidden">
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-6 gap-1">
           {sections.flatMap((section) => section.items).map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;

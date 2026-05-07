@@ -12,6 +12,7 @@ import { availabilityRouter } from "./routes/availability.js";
 import { authRouter } from "./routes/auth.js";
 import { bookingRouter } from "./routes/booking.js";
 import { callbackRequestRouter } from "./routes/callbackRequest.js";
+import { callLogsRouter } from "./routes/callLogs.js";
 import { googleRouter } from "./routes/google.js";
 import { healthRouter } from "./routes/health.js";
 import { timeRouter } from "./routes/time.js";
@@ -52,6 +53,7 @@ export function createApp() {
   app.use("/api/transfer", transferRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/google", validateAdminApiKey, googleRouter);
+  app.use("/api/admin/call-logs", validateAdminApiKey, callLogsRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: "Not found" });

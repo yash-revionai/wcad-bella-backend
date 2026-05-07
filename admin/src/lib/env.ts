@@ -2,6 +2,7 @@ const env = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY,
+  sessionSecret: process.env.SESSION_SECRET,
   backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL ?? process.env.BACKEND_URL,
   adminApiKey: process.env.ADMIN_API_KEY,
   adminDevBypass: process.env.ADMIN_DEV_BYPASS,
@@ -41,8 +42,8 @@ export function getBackendEnvIssue(): BackendEnvIssue | null {
 export function getMissingAdminEnv() {
   const entries: Array<[string, string | undefined]> = [
     ["NEXT_PUBLIC_SUPABASE_URL", env.supabaseUrl],
-    ["NEXT_PUBLIC_SUPABASE_ANON_KEY", env.supabaseAnonKey],
     ["SUPABASE_SERVICE_KEY", env.supabaseServiceKey],
+    ["SESSION_SECRET", env.sessionSecret],
     ["NEXT_PUBLIC_BACKEND_URL or BACKEND_URL", env.backendUrl],
     ["ADMIN_API_KEY", env.adminApiKey],
   ];

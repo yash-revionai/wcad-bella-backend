@@ -56,6 +56,21 @@ export type GoogleSettings = {
   backendUrl: string | null;
 };
 
+export type CallLogEntry = {
+  callId: string;
+  callerPhone: string | null;
+  callerName: string | null;
+  callStartedAt: string;
+  callEndedAt: string | null;
+  durationSeconds: number | null;
+  endReason: string | null;
+  outcome: "booked" | "abandoned" | "completed" | "error";
+  summary: string | null;
+  shortSummary: string | null;
+  hasRecording: boolean;
+  bookingId: string | null;
+};
+
 type RawBookingRow = {
   id: string | number;
   customer_name: string | null;
@@ -327,4 +342,128 @@ function summarizeHours(hours: LocationScheduleRecord["hours"]) {
   }
 
   return `${daySummary} - ${openDays[0]?.open_time} to ${openDays[0]?.close_time}`;
+}
+
+export async function getCallLogsData(params?: { cursor?: string; pageSize?: number; fromDate?: string; toDate?: string }) {
+  const accountId = await getAuthorizedAdminAccountId();
+  const backendHeaders = getBackendAdminHeaders();
+
+  if (!hasBackendEnv() || !backendHeaders) {
+    return {
+      mode: "live" as const,
+      calls: [],
+      total: 0,
+      next: null,
+      error: getBackendEnvIssue(),
+    };
+  }
+
+  const backendUrl = getBackendUrl()!;
+  const query = new URLSearchParams({ accountId });
+  if (params?.cursor) query.set("cursor", params.cursor);
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  if (params?.fromDate) query.set("fromDate", params.fromDate);
+  if (params?.toDate) query.set("toDate", params.toDate);
+
+  try {
+    const response = await fetch(`${backendUrl}/api/admin/call-logs?${query}`, {
+      cache: "no-store",
+      headers: backendHeaders,
+    });
+
+    if (!response.ok) {
+      return {
+        mode: "live" as const,
+        calls: [],
+        total: 0,
+        next: null,
+        error: `Backend returned ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      mode: "live" as const,
+      calls: Array.isArray(data.calls) ? data.calls : [],
+      total: data.total ?? 0,
+      next: data.next ?? null,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      mode: "live" as const,
+      calls: [],
+      total: 0,
+      next: null,
+      error: error instanceof Error ? error.message : "Unknown error fetching call logs",
+    };
+  }
+}
+
+export async function getSystemUsersData() {
+  try {
+    const supabase = createServiceSupabaseClient();
+
+    const { data: accounts, error: accountsError } = await supabase
+      .from("accounts")
+      .select("id,business_name")
+      .order("business_name");
+
+    if (accountsError) {
+      return { mode: "live" as const, accounts: null, error: accountsError.message };
+    }
+
+    if (!accounts || accounts.length === 0) {
+      return { mode: "live" as const, accounts: [], error: null };
+    }
+
+    const startOfWeek = businessWeekRangeIso().start;
+    const endOfWeek = businessWeekRangeIso().end;
+
+    const enriched = await Promise.all(
+      accounts.map(async (account) => {
+        try {
+          const [{ count: todayCount }, { data: weekBookings }] = await Promise.all([
+            supabase
+              .from("bookings")
+              .select("id", { count: "exact", head: true })
+              .eq("account_id", account.id)
+              .gte("appointment_start", businessDayRangeIso().start)
+              .lte("appointment_start", businessDayRangeIso().end),
+            supabase
+              .from("bookings")
+              .select("price_cents")
+              .eq("account_id", account.id)
+              .gte("appointment_start", startOfWeek)
+              .lte("appointment_start", endOfWeek),
+          ]);
+
+          const weekRevenue = (weekBookings || []).reduce((sum, b) => sum + (b.price_cents || 0), 0);
+
+          return {
+            id: account.id,
+            name: account.business_name,
+            todayBookingsCount: todayCount || 0,
+            weekRevenueCents: weekRevenue,
+            callCountThisWeek: 0,
+            googleConnected: false,
+          };
+        } catch (err) {
+          return {
+            id: account.id,
+            name: account.business_name,
+            todayBookingsCount: 0,
+            weekRevenueCents: 0,
+            callCountThisWeek: 0,
+            googleConnected: false,
+          };
+        }
+      })
+    );
+
+    return { mode: "live" as const, accounts: enriched, error: null };
+  } catch (error) {
+    return { mode: "live" as const, accounts: null, error: error instanceof Error ? error.message : "Unknown error" };
+  }
 }

@@ -41,7 +41,8 @@ const envSchema = z.object({
   ADMIN_APP_URL: optionalUrl,
   BACKEND_URL: optionalUrl,
   BELLA_API_KEY: z.preprocess(blankAsUndefined, z.string().min(16).optional()),
-  ADMIN_API_KEY: z.preprocess(blankAsUndefined, z.string().min(16).optional())
+  ADMIN_API_KEY: z.preprocess(blankAsUndefined, z.string().min(16).optional()),
+  ULTRAVOX_API_KEY: optionalString
 });
 
 export const env = envSchema.parse(process.env);

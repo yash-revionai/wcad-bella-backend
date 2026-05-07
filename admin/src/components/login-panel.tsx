@@ -1,41 +1,45 @@
 "use client";
 
 import { LoaderCircle, LogIn } from "lucide-react";
-import { useState, useTransition } from "react";
-import { createClientSupabaseClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 type LoginPanelProps = {
-  authEnabled: boolean;
   missingEnv: string[];
 };
 
-export function LoginPanel({ authEnabled, missingEnv }: LoginPanelProps) {
-  const [email, setEmail] = useState("worldclassautodetail@gmail.com");
-  const [message, setMessage] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+export function LoginPanel({ missingEnv }: LoginPanelProps) {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
-    startTransition(async () => {
-      try {
-        const supabase = createClientSupabaseClient();
-        const redirectTo = `${window.location.origin}/auth/callback?next=/dashboard`;
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: {
-            emailRedirectTo: redirectTo,
-          },
-        });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-        if (error) {
-          setMessage(error.message);
-          return;
-        }
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-        setMessage("Magic link sent. Open it on this device and the dashboard will unlock.");
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Unable to request a sign-in link.");
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || "Login failed");
+        setLoading(false);
+        return;
       }
-    });
+
+      const data = await response.json();
+      router.push(data.redirectTo || "/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+      setLoading(false);
+    }
   };
 
   return (
@@ -56,32 +60,10 @@ export function LoginPanel({ authEnabled, missingEnv }: LoginPanelProps) {
         </p>
       </div>
 
-      {authEnabled ? (
-        <div className="grid gap-4">
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-[var(--color-foreground)]">Admin email</span>
-            <input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              type="email"
-              className="field"
-              placeholder="worldclassautodetail@gmail.com"
-            />
-          </label>
-
-          <button type="button" className="action-button" onClick={handleSubmit} disabled={pending}>
-            {pending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-            <span>{pending ? "Sending link" : "Send magic link"}</span>
-          </button>
-
-          <p className="text-xs leading-6 text-[var(--color-muted)]">
-            Supabase Auth is enabled. The dashboard will only fully unlock after the email link is confirmed and the account matches an `admin_users` record.
-          </p>
-        </div>
-      ) : (
+      {missingEnv.length > 0 ? (
         <div className="grid gap-4">
           <div className="rounded-[8px] border border-[rgba(201,168,76,0.24)] bg-[rgba(201,168,76,0.08)] p-4 text-sm leading-7 text-[var(--color-foreground)]">
-            Live admin auth is not configured yet. Add the missing values below, restart the admin server, then sign in.
+            Admin auth is not fully configured. Add the missing values, restart the server, then try again.
           </div>
           <div className="rounded-[8px] border border-[rgba(245,240,232,0.08)] bg-[rgba(245,240,232,0.03)] p-4">
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-muted)]">Missing env</p>
@@ -92,9 +74,40 @@ export function LoginPanel({ authEnabled, missingEnv }: LoginPanelProps) {
             </ul>
           </div>
         </div>
-      )}
+      ) : (
+        <form onSubmit={handleSubmit} className="grid gap-4">
+          <label className="grid gap-2">
+            <span className="text-sm font-medium text-[var(--color-foreground)]">Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="field"
+              placeholder="admin@example.com"
+              required
+            />
+          </label>
 
-      {message ? <p className="text-sm leading-7 text-[var(--color-muted)]">{message}</p> : null}
+          <label className="grid gap-2">
+            <span className="text-sm font-medium text-[var(--color-foreground)]">Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="field"
+              placeholder="••••••••"
+              required
+            />
+          </label>
+
+          {error && <p className="text-sm text-red-400">{error}</p>}
+
+          <button type="submit" className="action-button" disabled={loading}>
+            {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+            <span>{loading ? "Signing in..." : "Sign in"}</span>
+          </button>
+        </form>
+      )}
     </section>
   );
 }

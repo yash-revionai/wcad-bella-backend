@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Mono, DM_Sans, DM_Serif_Display } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { PwaProvider } from "@/components/pwa-provider";
 import "./globals.css";
@@ -50,6 +52,8 @@ export default function RootLayout({
         <NavigationProgress />
         <PwaProvider />
         {children}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

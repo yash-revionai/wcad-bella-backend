@@ -1,8 +1,9 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
-import { hasAdminDevBypass, hasSupabaseAuthEnv, hasSupabaseServiceEnv } from "./env";
-import { createServiceSupabaseClient, createServerSupabaseClient } from "./supabase/server";
+import { hasAdminDevBypass, hasSupabaseServiceEnv } from "./env";
+import { createServiceSupabaseClient } from "./supabase/server";
+import { getSession, type Session } from "./session";
 
 export async function getDevBypassAdmin() {
   if (!hasAdminDevBypass() || !hasSupabaseServiceEnv()) {
@@ -26,37 +27,29 @@ export async function getDevBypassAdmin() {
     : null;
 }
 
-export async function getAuthorizedAdminAccountId() {
+export async function getAdminSession(): Promise<Session | null> {
   const devAdmin = await getDevBypassAdmin();
   if (devAdmin) {
-    return devAdmin.accountId;
+    return {
+      email: devAdmin.email,
+      accountId: devAdmin.accountId,
+      isSuperAdmin: false,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 86400,
+    };
   }
 
-  if (!hasSupabaseAuthEnv() || !hasSupabaseServiceEnv()) {
-    redirect("/?setup=missing-env");
-  }
+  return getSession();
+}
 
-  const authSupabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await authSupabase.auth.getUser();
+export async function getAuthorizedAdminAccountId() {
+  const session = await getAdminSession();
 
-  if (!user?.email) {
+  if (!session?.accountId) {
     redirect("/");
   }
 
-  const serviceSupabase = createServiceSupabaseClient();
-  const { data: adminUser } = await serviceSupabase
-    .from("admin_users")
-    .select("account_id")
-    .eq("email", user.email)
-    .single();
-
-  if (!adminUser?.account_id) {
-    redirect("/dashboard?saved=unauthorized");
-  }
-
-  return String(adminUser.account_id);
+  return session.accountId;
 }
 
 export async function requireLiveAdminAccountId(redirectPath: string) {

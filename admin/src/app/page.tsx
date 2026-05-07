@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { LoginPanel } from "@/components/login-panel";
-import { getMissingAdminEnv, hasAdminDevBypass, hasSupabaseAuthEnv } from "@/lib/env";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getMissingAdminEnv, hasAdminDevBypass } from "@/lib/env";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export default async function HomePage() {
   const missingEnv = getMissingAdminEnv();
@@ -10,21 +10,15 @@ export default async function HomePage() {
     redirect("/dashboard");
   }
 
-  if (hasSupabaseAuthEnv()) {
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      redirect("/dashboard");
-    }
+  const session = await getAdminSession();
+  if (session) {
+    redirect("/dashboard");
   }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-10">
       <div className="grid w-full gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <LoginPanel authEnabled={hasSupabaseAuthEnv()} missingEnv={missingEnv} />
+        <LoginPanel missingEnv={missingEnv} />
 
         <section className="panel grid gap-5 p-6 sm:p-8">
           <div>
@@ -53,7 +47,7 @@ export default async function HomePage() {
 
           <div className="rounded-[8px] border border-[rgba(245,240,232,0.08)] bg-[rgba(245,240,232,0.03)] p-4 text-sm leading-7 text-[var(--color-muted)]">
             {missingEnv.length === 0
-              ? "This environment is connected to Supabase Auth, the backend admin API, and live booking data."
+              ? "This environment is connected to the backend admin API and live booking data."
               : "Add the missing environment variables shown on the sign-in panel before testing the live dashboard."}
           </div>
         </section>
