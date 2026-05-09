@@ -1,12 +1,13 @@
+import { Readable } from "stream";
 import { Router } from "express";
 import { z } from "zod";
 import { AppError } from "../lib/errors.js";
 import { createServiceSupabaseClient } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
+import { env } from "../lib/env.js";
 import { resolveAccount } from "../services/accounts.js";
 import {
   listCalls,
-  getCallRecordingUrl,
   extractCallerPhone,
   extractTwilioCallSid,
   fetchTwilioCallerPhone,
@@ -175,12 +176,27 @@ callLogsRouter.get("/:callId/recording", async (req, res, next) => {
   try {
     const parsed = recordingParamsSchema.parse(req.params);
 
-    const recordingUrl = await getCallRecordingUrl(parsed.callId);
-    if (!recordingUrl) {
+    if (!env.ULTRAVOX_API_KEY) {
+      throw new AppError("ULTRAVOX_API_KEY not configured", 503);
+    }
+
+    const ultravoxRes = await fetch(
+      `https://api.ultravox.ai/api/calls/${parsed.callId}/recording`,
+      { headers: { "X-API-Key": env.ULTRAVOX_API_KEY } }
+    );
+
+    if (!ultravoxRes.ok || !ultravoxRes.body) {
       throw new AppError("Recording not available for this call", 404);
     }
 
-    res.json({ url: recordingUrl });
+    res.setHeader("Content-Type", ultravoxRes.headers.get("content-type") || "audio/wav");
+    res.setHeader("Cache-Control", "no-store");
+
+    const readable = Readable.fromWeb(ultravoxRes.body as Parameters<typeof Readable.fromWeb>[0]);
+    readable.pipe(res);
+    readable.on("error", (err) => {
+      logger.warn({ err, callId: parsed.callId }, "Recording stream error");
+    });
   } catch (error) {
     next(error);
   }

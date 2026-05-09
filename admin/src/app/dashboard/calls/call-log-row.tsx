@@ -5,8 +5,7 @@ import { type CallLogEntry } from "@/lib/admin-data";
 import { formatTimeInBusinessZone, formatWeekdayTimeInBusinessZone, isTodayInBusinessZone } from "@/lib/timezone";
 
 export function CallLogRow({ call }: { call: CallLogEntry }) {
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [loadingRecording, setLoadingRecording] = useState(false);
+  const [showRecording, setShowRecording] = useState(false);
 
   const timeLabel = isTodayInBusinessZone(call.callStartedAt)
     ? formatTimeInBusinessZone(call.callStartedAt)
@@ -22,24 +21,6 @@ export function CallLogRow({ call }: { call: CallLogEntry }) {
     error: "bg-[#ff6464]",
   };
 
-  const loadRecording = async () => {
-    if (recordingUrl) {
-      setRecordingUrl(null);
-      return;
-    }
-    setLoadingRecording(true);
-    try {
-      const response = await fetch(`/api/admin/call-logs/${call.callId}/recording`);
-      if (response.ok) {
-        const data = await response.json();
-        setRecordingUrl(data.url);
-      }
-    } catch (error) {
-      console.error("Failed to load recording:", error);
-    } finally {
-      setLoadingRecording(false);
-    }
-  };
 
   return (
     <details className="border-b border-[rgba(255,255,255,0.06)] last:border-b-0">
@@ -67,21 +48,17 @@ export function CallLogRow({ call }: { call: CallLogEntry }) {
           {call.hasRecording ? (
             <>
               <button
-                onClick={loadRecording}
-                disabled={loadingRecording}
-                className="action-button justify-center disabled:opacity-50"
+                onClick={() => setShowRecording(!showRecording)}
+                className="action-button justify-center"
               >
-                {loadingRecording ? "Loading..." : recordingUrl ? "Hide Recording" : "Play Recording"}
+                {showRecording ? "Hide Recording" : "Play Recording"}
               </button>
-              {recordingUrl ? (
+              {showRecording ? (
                 <audio
                   controls
-                  src={recordingUrl}
+                  src={`/api/admin/call-logs/${call.callId}/recording`}
                   className="w-full"
-                  style={{
-                    background: "#3a3832",
-                    borderRadius: "6px",
-                  }}
+                  style={{ background: "#3a3832", borderRadius: "6px" }}
                 />
               ) : null}
             </>

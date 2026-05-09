@@ -27,6 +27,15 @@ export async function GET(
     },
   );
 
-  const data = await response.json().catch(() => ({}));
-  return NextResponse.json(data, { status: response.status });
+  if (!response.ok || !response.body) {
+    return NextResponse.json({ error: "Recording not available" }, { status: response.status });
+  }
+
+  return new NextResponse(response.body, {
+    status: 200,
+    headers: {
+      "Content-Type": response.headers.get("content-type") || "audio/wav",
+      "Cache-Control": "no-store",
+    },
+  });
 }
