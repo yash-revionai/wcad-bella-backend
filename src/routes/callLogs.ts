@@ -8,6 +8,8 @@ import {
   listCalls,
   getCallRecordingUrl,
   extractCallerPhone,
+  extractTwilioCallSid,
+  fetchTwilioCallerPhone,
   calculateDuration,
   determineOutcome,
   UltravoxCall,
@@ -72,7 +74,11 @@ async function enrichCallWithBookingData(
   booking: { id: string } | null
 ): Promise<CallLogEntry> {
   const duration = calculateDuration(call);
-  const callerPhone = extractCallerPhone(call);
+  let callerPhone = extractCallerPhone(call);
+  if (!callerPhone) {
+    const sid = extractTwilioCallSid(call);
+    if (sid) callerPhone = await fetchTwilioCallerPhone(sid);
+  }
   const hasRecording = Boolean(call.recordingEnabled ?? false);
 
   // Try to find caller name if there's a booking
@@ -132,9 +138,6 @@ callLogsRouter.get("/", async (req, res, next) => {
     });
 
     // Enrich each call with booking data
-    if (callsResponse.results.length > 0) {
-      logger.info({ firstCall: JSON.stringify(callsResponse.results[0]) }, "Ultravox call sample");
-    }
     const enrichedCalls: CallLogEntry[] = [];
     for (const call of callsResponse.results) {
       const booking = await findBookingDuringCall(account.id, call);

@@ -126,6 +126,26 @@ export function extractCallerPhone(call: UltravoxCall): string | null {
   return null;
 }
 
+export function extractTwilioCallSid(call: UltravoxCall): string | null {
+  const sid = call.metadata?.["ultravox.twilio.call_sid"];
+  return sid ? String(sid) : null;
+}
+
+export async function fetchTwilioCallerPhone(callSid: string): Promise<string | null> {
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN) return null;
+
+  try {
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls/${callSid}.json`;
+    const credentials = Buffer.from(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`).toString("base64");
+    const response = await fetch(url, { headers: { Authorization: `Basic ${credentials}` } });
+    if (!response.ok) return null;
+    const data = await response.json() as { from?: string };
+    return data.from ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function calculateDuration(call: UltravoxCall): number | null {
   if (!call.joined || !call.ended) return null;
 
