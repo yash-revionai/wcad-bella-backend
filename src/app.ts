@@ -12,6 +12,7 @@ import { availabilityRouter } from "./routes/availability.js";
 import { authRouter } from "./routes/auth.js";
 import { bookingRouter } from "./routes/booking.js";
 import { callbackRequestRouter } from "./routes/callbackRequest.js";
+import { callerInfoRouter } from "./routes/callerInfo.js";
 import { callLogsRouter } from "./routes/callLogs.js";
 import { googleRouter } from "./routes/google.js";
 import { healthRouter } from "./routes/health.js";
@@ -50,6 +51,7 @@ export function createApp() {
   app.use("/api/availability", availabilityRouter);
   app.use("/api/booking", bookingRateLimit, bookingRouter);
   app.use("/api/callback-request", callbackRequestRouter);
+  app.use("/api/caller-info", callerInfoRouter);
   app.use("/api/transfer", transferRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/google", validateAdminApiKey, googleRouter);

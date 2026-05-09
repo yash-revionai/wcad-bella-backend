@@ -82,9 +82,10 @@ async function enrichCallWithBookingData(
   const hasRecording = Boolean(call.recordingEnabled ?? false);
 
   // Try to find caller name if there's a booking
+  const supabase = createServiceSupabaseClient();
   let callerName: string | null = null;
+
   if (booking) {
-    const supabase = createServiceSupabaseClient();
     try {
       const { data } = await supabase
         .from("bookings")
@@ -95,6 +96,20 @@ async function enrichCallWithBookingData(
       callerName = data?.customer_name || null;
     } catch (error) {
       logger.warn({ bookingId: booking.id }, "Failed to fetch booking details");
+    }
+  }
+
+  if (!callerName) {
+    try {
+      const { data } = await supabase
+        .from("call_sessions")
+        .select("caller_name")
+        .eq("ultravox_call_id", call.callId)
+        .single();
+
+      callerName = data?.caller_name || null;
+    } catch {
+      // no name captured for this call
     }
   }
 
