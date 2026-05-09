@@ -132,6 +132,9 @@ callLogsRouter.get("/", async (req, res, next) => {
     });
 
     // Enrich each call with booking data
+    if (callsResponse.results.length > 0) {
+      logger.info({ firstCall: JSON.stringify(callsResponse.results[0]) }, "Ultravox call sample");
+    }
     const enrichedCalls: CallLogEntry[] = [];
     for (const call of callsResponse.results) {
       const booking = await findBookingDuringCall(account.id, call);
