@@ -1,5 +1,6 @@
 {
-  "installCommand": "npm ci && cd admin && npm ci && cd ..",
+  "installCommand": "npm ci && npm ci --prefix admin",
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "framework": "nextjs"
 }
