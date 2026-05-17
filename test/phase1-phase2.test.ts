@@ -158,8 +158,6 @@ test("POST /api/callback-request rejects invalid callback details gracefully", a
 
   assert.equal(response.body.saved, false);
   assert.match(response.body.result, /valid callback details/);
-  assert.equal(response.body.agentReaction, "speaks");
-  assert.equal(response.headers["x-ultravox-agent-reaction"], "speaks");
 });
 
 test("POST /api/availability rejects invalid preferredDate values", async () => {

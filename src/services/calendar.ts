@@ -2,12 +2,10 @@ import { google, calendar_v3 } from "googleapis";
 import { AppError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { monitoring } from "../lib/monitoring.js";
-import { getValidAccessToken } from "./token.js";
+import { getServiceAccountAuth } from "./token.js";
 
-function createCalendarClient(accessToken: string) {
-  const auth = new google.auth.OAuth2();
-  auth.setCredentials({ access_token: accessToken });
-  return google.calendar({ version: "v3", auth });
+function createCalendarClient() {
+  return google.calendar({ version: "v3", auth: getServiceAccountAuth() });
 }
 
 const eventCacheTtlMs = 30_000;
@@ -67,9 +65,9 @@ function toCalendarAppError(error: unknown, operation: GoogleCalendarOperation) 
 
   if (isReconnectRequiredError(error)) {
     return new AppError(
-      "Google Calendar access has expired or been revoked. Reconnect Google Calendar in admin and try again.",
-      409,
-      "google_calendar_reconnect_required"
+      "Google Calendar access denied. Make sure all calendars are shared with the service account email.",
+      403,
+      "google_calendar_access_denied"
     );
   }
 
@@ -123,11 +121,11 @@ function logGoogleCalendarError(
     "Google Calendar API error"
   );
 
-  // Alert on reconnect-required errors
   if (isReconnectRequiredError(error) && context.accountId) {
-    monitoring.logTokenRefreshFailure({
+    monitoring.logCalendarError({
       accountId: String(context.accountId),
-      error: `${operation} failed: ${message}`,
+      operation,
+      error: `Access denied — calendar not shared with service account: ${message}`,
       timestamp: new Date().toISOString(),
     });
   }
@@ -152,8 +150,7 @@ export type GoogleCalendarSummary = {
 
 export async function listGoogleCalendars(accountId: string): Promise<GoogleCalendarSummary[]> {
   try {
-    const accessToken = await getValidAccessToken(accountId);
-    const calendar = createCalendarClient(accessToken);
+    const calendar = createCalendarClient();
     const response = await calendar.calendarList.list({
       minAccessRole: "reader",
       showHidden: true
@@ -184,8 +181,7 @@ export async function fetchCalendarEvents(accountId: string, calendarId: string,
   }
 
   try {
-    const accessToken = await getValidAccessToken(accountId);
-    const calendar = createCalendarClient(accessToken);
+    const calendar = createCalendarClient();
     const response = await calendar.events.list(
       {
         calendarId,
@@ -219,8 +215,7 @@ export async function fetchFreeBusy(accountId: string, calendarIds: string[], ti
   }
 
   try {
-    const accessToken = await getValidAccessToken(accountId);
-    const calendar = createCalendarClient(accessToken);
+    const calendar = createCalendarClient();
     const response = await calendar.freebusy.query(
       {
         requestBody: {
@@ -250,8 +245,7 @@ export async function createCalendarEvent(input: {
   endIso: string;
 }) {
   try {
-    const accessToken = await getValidAccessToken(input.accountId);
-    const calendar = createCalendarClient(accessToken);
+    const calendar = createCalendarClient();
     const response = await calendar.events.insert(
       {
         calendarId: input.calendarId,
@@ -287,8 +281,7 @@ export async function createCalendarEvent(input: {
 
 export async function deleteCalendarEvent(accountId: string, calendarId: string, eventId: string) {
   try {
-    const accessToken = await getValidAccessToken(accountId);
-    const calendar = createCalendarClient(accessToken);
+    const calendar = createCalendarClient();
 
     await calendar.events.delete(
       {

@@ -1,202 +1,119 @@
-import { Readable } from "stream";
 import { Router } from "express";
 import { z } from "zod";
-import { AppError } from "../lib/errors.js";
 import { createServiceSupabaseClient } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
-import { env } from "../lib/env.js";
 import { resolveAccount } from "../services/accounts.js";
 import {
-  listCalls,
-  extractCallerPhone,
-  extractTwilioCallSid,
-  fetchTwilioCallerPhone,
-  calculateDuration,
-  determineOutcome,
-  UltravoxCall,
-  CallLogEntry
-} from "../services/ultravox.js";
+  listRetellCalls,
+  getRetellCall,
+  calculateRetellDuration,
+  determineRetellOutcome,
+  type RetellCall
+} from "../services/retell.js";
 
 export const callLogsRouter = Router();
 
+export interface CallLogEntry {
+  callId: string;
+  callerPhone: string | null;
+  callerName: string | null;
+  callStartedAt: string | null;
+  callEndedAt: string | null;
+  durationSeconds: number | null;
+  disconnectionReason: string | null;
+  outcome: "booked" | "abandoned" | "completed" | "error";
+  summary: string | null;
+  recordingUrl: string | null;
+  bookingId: string | null;
+}
+
 const listCallLogsQuerySchema = z.object({
-  cursor: z.string().optional(),
+  pagination_key: z.string().optional(),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
-  fromDate: z.string().optional(),
-  toDate: z.string().optional(),
   accountId: z.string().uuid().optional()
 });
 
-const recordingParamsSchema = z.object({
+const callParamsSchema = z.object({
   callId: z.string()
 });
 
-async function findBookingDuringCall(
-  accountId: string,
-  call: UltravoxCall
-): Promise<{ id: string } | null> {
+async function resolveCallerName(callId: string, bookingId: string | null): Promise<string | null> {
   const supabase = createServiceSupabaseClient();
 
-  if (!call.joined || !call.ended) return null;
-
-  const joinedAt = new Date(call.joined);
-  const endedAt = new Date(call.ended);
-
-  // Check for bookings created within the call timeframe (with 30s buffer after call ends)
-  const bufferMs = 30000;
-  const startTime = joinedAt.toISOString();
-  const endTime = new Date(endedAt.getTime() + bufferMs).toISOString();
+  if (bookingId) {
+    try {
+      const { data } = await supabase.from("bookings").select("customer_name").eq("id", bookingId).single();
+      if (data?.customer_name) return data.customer_name;
+    } catch {
+      // fall through to call_sessions lookup
+    }
+  }
 
   try {
-    const { data, error } = await supabase
-      .from("bookings")
-      .select("id")
-      .eq("account_id", accountId)
-      .gte("created_at", startTime)
-      .lte("created_at", endTime)
-      .limit(1)
-      .single();
-
-    if (error && error.code !== "PGRST116") {
-      logger.warn({ accountId, error }, "Failed to find booking for call");
-      return null;
-    }
-
-    return data || null;
-  } catch (error) {
-    logger.warn({ accountId, error }, "Exception finding booking for call");
+    const { data } = await supabase.from("call_sessions").select("caller_name").eq("retell_call_id", callId).single();
+    return data?.caller_name ?? null;
+  } catch {
     return null;
   }
 }
 
-async function enrichCallWithBookingData(
-  call: UltravoxCall,
-  accountId: string,
-  booking: { id: string } | null
-): Promise<CallLogEntry> {
-  const duration = calculateDuration(call);
-  let callerPhone = extractCallerPhone(call);
-  if (!callerPhone) {
-    const sid = extractTwilioCallSid(call);
-    if (sid) callerPhone = await fetchTwilioCallerPhone(sid);
-  }
-  const hasRecording = Boolean(call.recordingEnabled ?? false);
-
-  // Try to find caller name if there's a booking
-  const supabase = createServiceSupabaseClient();
-  let callerName: string | null = null;
-
-  if (booking) {
-    try {
-      const { data } = await supabase
-        .from("bookings")
-        .select("customer_name")
-        .eq("id", booking.id)
-        .single();
-
-      callerName = data?.customer_name || null;
-    } catch (error) {
-      logger.warn({ bookingId: booking.id }, "Failed to fetch booking details");
-    }
-  }
-
-  if (!callerName) {
-    try {
-      const { data } = await supabase
-        .from("call_sessions")
-        .select("caller_name")
-        .eq("ultravox_call_id", call.callId)
-        .single();
-
-      callerName = data?.caller_name || null;
-    } catch {
-      // no name captured for this call
-    }
-  }
-
-  const outcome = determineOutcome(call, Boolean(booking));
+async function enrichCall(call: RetellCall): Promise<CallLogEntry> {
+  const bookingId = call.call_analysis?.custom_analysis_data?.booking_id ?? null;
+  const callerName = await resolveCallerName(call.call_id, bookingId || null);
+  const duration = calculateRetellDuration(call);
+  const outcome = determineRetellOutcome(call, Boolean(bookingId));
 
   return {
-    callId: call.callId,
-    callerPhone: callerPhone,
-    callerName: callerName,
-    callStartedAt: call.created,
-    callEndedAt: call.ended || null,
+    callId: call.call_id,
+    callerPhone: call.from_number,
+    callerName,
+    callStartedAt: call.start_timestamp ? new Date(call.start_timestamp).toISOString() : null,
+    callEndedAt: call.end_timestamp ? new Date(call.end_timestamp).toISOString() : null,
     durationSeconds: duration,
-    endReason: call.endReason || null,
+    disconnectionReason: call.disconnection_reason,
     outcome,
-    summary: call.summary || null,
-    shortSummary: call.shortSummary || null,
-    hasRecording,
-    bookingId: booking?.id || null
+    summary: call.call_analysis?.call_summary ?? null,
+    recordingUrl: call.recording_url,
+    bookingId: bookingId || null
   };
 }
 
 callLogsRouter.get("/", async (req, res, next) => {
   try {
     const parsed = listCallLogsQuerySchema.parse({
-      cursor: req.query.cursor,
+      pagination_key: req.query.pagination_key,
       pageSize: req.query.pageSize,
-      fromDate: req.query.fromDate,
-      toDate: req.query.toDate,
       accountId: typeof req.query.accountId === "string" ? req.query.accountId : undefined
     });
 
-    const account = await resolveAccount(parsed.accountId);
+    await resolveAccount(parsed.accountId);
 
-    // Fetch calls from Ultravox
-    const callsResponse = await listCalls({
-      ...(parsed.cursor && { cursor: parsed.cursor }),
-      pageSize: parsed.pageSize,
-      ...(parsed.fromDate && { fromDate: parsed.fromDate }),
-      ...(parsed.toDate && { toDate: parsed.toDate }),
-      sort: "-created"
+    const callsResponse = await listRetellCalls({
+      ...(parsed.pagination_key && { pagination_key: parsed.pagination_key }),
+      limit: parsed.pageSize,
+      sort_order: "descending"
     });
 
-    // Enrich each call with booking data
     const enrichedCalls: CallLogEntry[] = [];
-    for (const call of callsResponse.results) {
-      const booking = await findBookingDuringCall(account.id, call);
-      const enriched = await enrichCallWithBookingData(call, account.id, booking);
-      enrichedCalls.push(enriched);
+    for (const call of callsResponse.calls) {
+      enrichedCalls.push(await enrichCall(call));
     }
 
     res.json({
       calls: enrichedCalls,
-      total: callsResponse.total,
-      next: callsResponse.next || null,
-      previous: callsResponse.previous || null
+      pagination_key: callsResponse.pagination_key ?? null
     });
   } catch (error) {
     next(error);
   }
 });
 
-callLogsRouter.get("/:callId/recording", async (req, res, next) => {
+callLogsRouter.get("/:callId", async (req, res, next) => {
   try {
-    const parsed = recordingParamsSchema.parse(req.params);
-
-    if (!env.ULTRAVOX_API_KEY) {
-      throw new AppError("ULTRAVOX_API_KEY not configured", 503);
-    }
-
-    const ultravoxRes = await fetch(
-      `https://api.ultravox.ai/api/calls/${parsed.callId}/recording`,
-      { headers: { "X-API-Key": env.ULTRAVOX_API_KEY } }
-    );
-
-    if (!ultravoxRes.ok || !ultravoxRes.body) {
-      throw new AppError("Recording not available for this call", 404);
-    }
-
-    res.setHeader("Content-Type", ultravoxRes.headers.get("content-type") || "audio/wav");
-    res.setHeader("Cache-Control", "no-store");
-
-    const readable = Readable.fromWeb(ultravoxRes.body as Parameters<typeof Readable.fromWeb>[0]);
-    readable.pipe(res);
-    readable.on("error", (err) => {
-      logger.warn({ err, callId: parsed.callId }, "Recording stream error");
-    });
+    const { callId } = callParamsSchema.parse(req.params);
+    const call = await getRetellCall(callId);
+    const entry = await enrichCall(call);
+    res.json(entry);
   } catch (error) {
     next(error);
   }

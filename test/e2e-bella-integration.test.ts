@@ -26,8 +26,6 @@ test('Bella Integration E2E Tests', async (suite) => {
     assert.strictEqual(res.status, 200);
     assert.ok(typeof res.body.result === 'string');
     assert.ok(Array.isArray(res.body.slots));
-    assert.strictEqual(res.body.agentReaction, 'speaks');
-    assert.strictEqual(res.headers['x-ultravox-agent-reaction'], 'speaks');
   });
 
   await suite.test('Booking endpoint returns proper response format', async () => {
@@ -46,8 +44,6 @@ test('Bella Integration E2E Tests', async (suite) => {
     // Response should either be a successful booking or a graceful error
     assert.ok([200, 400, 409].includes(res.status));
     assert.ok(typeof res.body.result === 'string');
-    assert.strictEqual(res.body.agentReaction, 'speaks');
-    assert.strictEqual(res.headers['x-ultravox-agent-reaction'], 'speaks');
   });
 
   await suite.test('Booking endpoint validates phone number format', async () => {
@@ -110,7 +106,6 @@ test('Bella Integration E2E Tests', async (suite) => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.transferTo, '+14439574789');
-    assert.strictEqual(res.body.agentReaction, 'transfer-call');
   });
 
   await suite.test('Transfer endpoint - secondary attempt', async () => {
@@ -124,7 +119,6 @@ test('Bella Integration E2E Tests', async (suite) => {
 
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.transferTo, '+14434633533');
-    assert.strictEqual(res.body.agentReaction, 'transfer-call');
   });
 
   await suite.test('Health check endpoint', async () => {

@@ -171,3 +171,91 @@ export async function sendDeveloperAlert(input: { subject: string; text: string 
 
   return true;
 }
+
+export async function sendOwnerNotification(subject: string, text: string): Promise<boolean> {
+  const toEmail = env.OWNER_NOTIFICATION_EMAIL || env.DEVELOPER_ALERT_EMAIL;
+  if (!env.RESEND_API_KEY || !toEmail) {
+    logger.warn(
+      { hasResendKey: Boolean(env.RESEND_API_KEY), hasToEmail: Boolean(toEmail) },
+      "Skipping owner notification: missing RESEND_API_KEY or OWNER_NOTIFICATION_EMAIL"
+    );
+    return false;
+  }
+
+  const response = await fetchWithTimeout("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: "Bella <alerts@worldclassautodetail.com>",
+      to: [toEmail],
+      subject,
+      text
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend owner notification failed with ${response.status}: ${body}`);
+  }
+
+  return true;
+}
+
+export type OwnerCallNotificationDetails = {
+  callerPhone: string | null;
+  callerName: string | null;
+  durationSeconds: number | null;
+  outcome: "booked" | "abandoned" | "completed" | "error";
+  shortSummary: string | null;
+  booking?: {
+    serviceName: string;
+    customerName: string;
+    locationName: string;
+    appointmentStartIso: string;
+  } | null;
+};
+
+export async function sendOwnerCallNotification(details: OwnerCallNotificationDetails): Promise<boolean> {
+  const phoneDisplay = details.callerPhone ? formatPhoneForDisplay(details.callerPhone) : "Unknown";
+  const duration = details.durationSeconds != null ? `${details.durationSeconds}s` : "—";
+
+  let subject: string;
+  const lines: string[] = [];
+
+  if (details.outcome === "booked" && details.booking) {
+    const apptTime = DateTime.fromISO(details.booking.appointmentStartIso, { zone: businessZone }).toFormat(
+      "cccc, LLLL d 'at' h:mm a"
+    );
+    subject = `✅ New Booking — ${details.booking.serviceName} for ${details.booking.customerName} at ${details.booking.locationName}`;
+    lines.push(
+      "Bella just confirmed a new booking.",
+      "",
+      `Customer: ${details.booking.customerName}`,
+      `Phone: ${phoneDisplay}`,
+      `Service: ${details.booking.serviceName}`,
+      `Location: ${details.booking.locationName}`,
+      `Appointment: ${apptTime}`,
+      `Call Duration: ${duration}`
+    );
+  } else {
+    const outcomeLabel = { completed: "Completed", abandoned: "Abandoned", error: "Error", booked: "Booked" }[
+      details.outcome
+    ];
+    subject = `Bella Call — ${phoneDisplay} — ${duration} — ${outcomeLabel}`;
+    lines.push(
+      `Caller: ${details.callerName || "Unknown"}`,
+      `Phone: ${phoneDisplay}`,
+      `Duration: ${duration}`,
+      `Outcome: ${outcomeLabel}`
+    );
+  }
+
+  if (details.shortSummary) {
+    lines.push("", `Summary: ${details.shortSummary}`);
+  }
+
+  return sendOwnerNotification(subject, lines.join("\n"));
+}

@@ -161,7 +161,7 @@ async function fetchGoogleSettings(accountId: string | null): Promise<GoogleSett
   const status = await statusResponse.json();
   const mapping = await mappingResponse.json();
   let calendarOptions: GoogleSettings["calendarOptions"] = [];
-  let connected = Boolean(status.connected);
+  const connected = Boolean(status.connected);
 
   if (connected) {
     let calendarsResponse: Response;
@@ -178,8 +178,6 @@ async function fetchGoogleSettings(accountId: string | null): Promise<GoogleSett
     if (calendarsResponse.ok) {
       const calendars = await calendarsResponse.json();
       calendarOptions = Array.isArray(calendars.calendars) ? calendars.calendars : [];
-    } else if (calendarsResponse.status === 409) {
-      connected = false;
     }
   }
 

@@ -14,13 +14,13 @@ const schema = z.object({
 
 transferRouter.post("/", validateApiKey, async (req, res, next) => {
   try {
-    const { attempt } = schema.parse(req.body);
+    const body = (req.body as Record<string, unknown>)?.args ?? req.body;
+    const { attempt } = schema.parse(body);
 
     if (!attempt || attempt === "primary") {
       res.json({
         result: "I can connect you with our team now. Please hold for just a moment.",
-        transferTo: PRIMARY_NUMBER,
-        agentReaction: "transfer-call"
+        transferTo: PRIMARY_NUMBER
       });
       return;
     }
@@ -28,24 +28,22 @@ transferRouter.post("/", validateApiKey, async (req, res, next) => {
     if (attempt === "secondary") {
       res.json({
         result: "Let me try one more line for you. Please hold.",
-        transferTo: SECONDARY_NUMBER,
-        agentReaction: "transfer-call"
+        transferTo: SECONDARY_NUMBER
       });
       return;
     }
 
     // Both transfers failed — ask Bella to collect callback details
     res.json({
-      result: "I wasn't able to connect you with a team member right now. Can I get your name, phone number, a brief reason for your call, and the best time for us to reach you back?",
-      transferTo: null,
-      agentReaction: "speaks-once"
+      result:
+        "I wasn't able to connect you with a team member right now. Can I get your name, phone number, a brief reason for your call, and the best time for us to reach you back?",
+      transferTo: null
     });
   } catch (error) {
     if (error instanceof Error && error.name === "ZodError") {
       res.json({
         result: "I can help connect you with our team now. Please hold for just a moment.",
-        transferTo: PRIMARY_NUMBER,
-        agentReaction: "transfer-call"
+        transferTo: PRIMARY_NUMBER
       });
       return;
     }

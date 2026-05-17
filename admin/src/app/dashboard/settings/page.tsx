@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import { CalendarDays, RefreshCw, Save, Unlink } from "lucide-react";
+import { CalendarDays, Save } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { StatusBanner } from "@/components/status-banner";
 import { getSettingsData } from "@/lib/admin-data";
-import { disconnectGoogleAction, saveGoogleMappingAction } from "../actions";
+import { saveGoogleMappingAction } from "../actions";
 import { SettingsSkeleton } from "@/components/skeletons/settings-skeleton";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -15,8 +15,8 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
   const data = await getSettingsData();
   const mappedLocationCount = data.google.locations.filter((location) => Boolean(location.google_calendar_id)).length;
   const connectedAccountLabel = data.google.connected
-    ? data.google.connectedAccountEmail ?? data.google.connectedAccountName ?? "Connected Google account"
-    : "No Google account connected";
+    ? "Service account active"
+    : "Service account not configured";
 
   return (
     <div className="min-h-screen">
@@ -48,27 +48,11 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
                   <div>
                     <p className="text-[18px] font-semibold text-[#f5f0e8]">
                       {data.google.connected
-                        ? `Connected - ${mappedLocationCount}/3 location calendars mapped`
-                        : "Google Calendar disconnected"}
+                        ? `Service Account — ${mappedLocationCount}/3 calendars mapped`
+                        : "Google Calendar not configured"}
                     </p>
                     <p className="text-[15px] text-[#b7ab98]">{connectedAccountLabel}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  {data.google.backendUrl ? (
-                    <a className="ghost-button text-[#f5f0e8]" href="/dashboard/settings/google/connect">
-                      <RefreshCw className="h-4 w-4" />
-                      {data.google.connected ? "Reconnect" : "Connect"}
-                    </a>
-                  ) : null}
-                  {data.google.backendUrl ? (
-                    <form action={disconnectGoogleAction}>
-                      <PendingSubmitButton pendingLabel="Disconnecting..." className="ghost-button text-[#f5f0e8]" disabled={!data.google.connected}>
-                        <Unlink className="h-4 w-4" />
-                        Disconnect
-                      </PendingSubmitButton>
-                    </form>
-                  ) : null}
                 </div>
               </div>
             </div>
@@ -120,7 +104,7 @@ async function SettingsContent(props: { searchParams: Promise<Record<string, str
             )}
 
             {data.google.connected && data.google.calendarOptions.length === 0 && (
-              <p className="mt-4 text-[14px] text-[#9c9487]">No calendars found in the connected account. Try reconnecting Google Calendar.</p>
+              <p className="mt-4 text-[14px] text-[#9c9487]">No calendars found. Share each Google Calendar with the service account email, then reload this page.</p>
             )}
           </section>
 

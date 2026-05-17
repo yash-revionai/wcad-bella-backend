@@ -42,7 +42,9 @@ const envSchema = z.object({
   BACKEND_URL: optionalUrl,
   BELLA_API_KEY: z.preprocess(blankAsUndefined, z.string().min(16).optional()),
   ADMIN_API_KEY: z.preprocess(blankAsUndefined, z.string().min(16).optional()),
-  ULTRAVOX_API_KEY: optionalString
+  RETELL_API_KEY: optionalString,
+  OWNER_NOTIFICATION_EMAIL: optionalString,
+  GOOGLE_SERVICE_ACCOUNT_JSON: optionalString
 });
 
 export const env = envSchema.parse(process.env);
@@ -56,19 +58,3 @@ export function requireEnv(name: "SUPABASE_URL" | "SUPABASE_SERVICE_KEY" | "BELL
   return value;
 }
 
-export function requireGoogleEnv() {
-  const missing = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"].filter((name) => {
-    const value = process.env[name];
-    return !value || value.includes("REPLACE");
-  });
-
-  if (missing.length > 0) {
-    throw new AppError(`Missing required Google OAuth environment variables: ${missing.join(", ")}`, 503);
-  }
-
-  return {
-    clientId: process.env.GOOGLE_CLIENT_ID!,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    redirectUri: process.env.GOOGLE_REDIRECT_URI!
-  };
-}

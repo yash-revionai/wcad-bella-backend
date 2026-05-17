@@ -14,15 +14,16 @@ const callerInfoSchema = z
   .strict();
 
 callerInfoRouter.post("/", validateApiKey, async (req, res) => {
-  res.set("X-Ultravox-Agent-Reaction", "speaks");
-
   try {
-    const parsed = callerInfoSchema.parse(req.body);
+    const retellBody = req.body as Record<string, unknown>;
+    const args = (retellBody?.args as Record<string, unknown>) ?? retellBody;
+    const callId = args?.callId ?? (retellBody?.call as Record<string, unknown>)?.call_id;
+    const parsed = callerInfoSchema.parse({ ...args, callId });
     const supabase = createServiceSupabaseClient();
 
     const { error } = await supabase.from("call_sessions").upsert(
-      { ultravox_call_id: parsed.callId, caller_name: parsed.callerName },
-      { onConflict: "ultravox_call_id" }
+      { retell_call_id: parsed.callId, caller_name: parsed.callerName },
+      { onConflict: "retell_call_id" }
     );
 
     if (error) {
@@ -31,9 +32,9 @@ callerInfoRouter.post("/", validateApiKey, async (req, res) => {
       logger.info({ callId: parsed.callId, callerName: parsed.callerName }, "Caller name captured");
     }
 
-    res.json({ result: "", agentReaction: "speaks" });
+    res.json({ result: "" });
   } catch (error) {
     logger.error({ error }, "callerInfo endpoint error");
-    res.json({ result: "", agentReaction: "speaks" });
+    res.json({ result: "" });
   }
 });

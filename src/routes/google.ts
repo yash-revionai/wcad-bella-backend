@@ -3,9 +3,9 @@ import { z } from "zod";
 import { AppError } from "../lib/errors.js";
 import { createServiceSupabaseClient } from "../lib/supabase.js";
 import { locationSlugs } from "../config/constants.js";
-import { clearCalendarMappings, clearGoogleTokens, resolveAccount } from "../services/accounts.js";
+import { resolveAccount } from "../services/accounts.js";
 import { clearEventCacheForAccount, listGoogleCalendars } from "../services/calendar.js";
-import { calendarScopesForDisplay } from "../services/token.js";
+import { isServiceAccountConfigured } from "../services/token.js";
 
 export const googleRouter = Router();
 
@@ -31,9 +31,9 @@ googleRouter.get("/status", async (req, res, next) => {
     const account = await resolveAccount(parsed.accountId);
     res.json({
       accountId: account.id,
-      connected: Boolean(account.google_refresh_token_encrypted),
+      connected: isServiceAccountConfigured(),
       mainCalendarMapped: Boolean(account.google_main_calendar_id),
-      scopes: calendarScopesForDisplay()
+      mode: "service_account"
     });
   } catch (error) {
     next(error);
@@ -110,26 +110,6 @@ googleRouter.put("/mapping", async (req, res, next) => {
 
     clearEventCacheForAccount(account.id);
     res.json({ ok: true });
-  } catch (error) {
-    next(error);
-  }
-});
-
-googleRouter.delete("/connection", async (req, res, next) => {
-  try {
-    const parsed = accountIdQuerySchema.parse({
-      accountId: typeof req.query.accountId === "string" ? req.query.accountId : undefined
-    });
-    const account = await resolveAccount(parsed.accountId);
-    await clearGoogleTokens(account.id);
-    await clearCalendarMappings(account.id);
-    clearEventCacheForAccount(account.id);
-
-    res.json({
-      ok: true,
-      connected: false,
-      mainCalendarMapped: false
-    });
   } catch (error) {
     next(error);
   }

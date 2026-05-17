@@ -97,9 +97,6 @@ const googleMappingFormSchema = z.object({
   mobileCalendarId: calendarIdSchema,
 });
 
-const googleAuthUrlResponseSchema = z.object({
-  url: z.string().url(),
-});
 
 function parseRequiredForm<T>(schema: z.ZodType<T>, value: unknown, redirectPath: string): T {
   const parsed = schema.safeParse(value);
@@ -292,66 +289,3 @@ export async function saveGoogleMappingAction(formData: FormData) {
   redirect("/dashboard/settings?saved=mapping");
 }
 
-export async function connectGoogleAction() {
-  const accountId = await requireLiveAdminAccountId("/dashboard/settings");
-  if (!hasBackendEnv()) {
-    redirect("/dashboard/settings?saved=config-error");
-  }
-
-  const backendUrl = getBackendUrl()!;
-  const backendHeaders = getBackendAdminHeaders();
-  if (!backendHeaders) {
-    redirect("/dashboard/settings?saved=config-error");
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(`${backendUrl}/api/auth/google/url?accountId=${encodeURIComponent(accountId)}`, {
-      cache: "no-store",
-      headers: backendHeaders,
-    });
-  } catch {
-    redirect("/dashboard/settings?saved=google-error");
-  }
-
-  if (!response.ok) {
-    redirect("/dashboard/settings?saved=google-error");
-  }
-
-  const parsed = googleAuthUrlResponseSchema.safeParse(await response.json());
-  if (!parsed.success) {
-    redirect("/dashboard/settings?saved=google-error");
-  }
-
-  redirect(parsed.data.url);
-}
-
-export async function disconnectGoogleAction() {
-  const accountId = await requireLiveAdminAccountId("/dashboard/settings");
-  if (!hasBackendEnv()) {
-    redirect("/dashboard/settings?saved=config-error");
-  }
-
-  const backendUrl = getBackendUrl()!;
-  const backendHeaders = getBackendAdminHeaders();
-  if (!backendHeaders) {
-    redirect("/dashboard/settings?saved=config-error");
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(`${backendUrl}/api/google/connection?accountId=${encodeURIComponent(accountId)}`, {
-      method: "DELETE",
-      headers: backendHeaders,
-    });
-  } catch {
-    redirect("/dashboard/settings?saved=google-error");
-  }
-
-  if (!response.ok) {
-    redirect("/dashboard/settings?saved=google-error");
-  }
-
-  revalidatePath("/dashboard/settings");
-  redirect("/dashboard/settings?saved=disconnect");
-}

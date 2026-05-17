@@ -40,10 +40,9 @@ const bookingRequestSchema = z.object({
 }).strict();
 
 bookingRouter.post("/", validateApiKey, async (req, res, next) => {
-  res.set("X-Ultravox-Agent-Reaction", "speaks");
-
   try {
-    const parsed = bookingRequestSchema.parse(req.body);
+    const body = (req.body as Record<string, unknown>)?.args ?? req.body;
+    const parsed = bookingRequestSchema.parse(body);
     const response = await confirmBooking(parsed);
     res.json(response);
   } catch (error) {
@@ -62,16 +61,14 @@ bookingRouter.post("/", validateApiKey, async (req, res, next) => {
       if (hasPhoneIssue) {
         res.json({
           result:
-            "I need the full ten-digit callback phone number before I can book that appointment. Please ask the caller to repeat the number digit by digit, then read it back in three groups to confirm.",
-          agentReaction: "speaks"
+            "I need the full ten-digit callback phone number before I can book that appointment. Please ask the caller to repeat the number digit by digit, then read it back in three groups to confirm."
         });
         return;
       }
 
       res.json({
         result:
-          "I did not get enough valid details to confirm the booking. Could I confirm the caller's name, phone number, service, vehicle type, location, and appointment time?",
-        agentReaction: "speaks"
+          "I did not get enough valid details to confirm the booking. Could I confirm the caller's name, phone number, service, vehicle type, location, and appointment time?"
       });
       return;
     }
